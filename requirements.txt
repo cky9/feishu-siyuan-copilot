@@ -1,0 +1,6 @@
+lark-oapi>=1.2.0
+requests>=2.31.0
+schedule>=1.2.0
+numpy>=1.24.0
+sentence-transformers>=2.2.2
+torch>=2.0.0

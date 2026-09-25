@@ -1,0 +1,40 @@
+# Configuration & Credentials (STRICTLY PROHIBITED IN REPO)
+config.json
+.env
+*.token
+*.key
+*.pem
+
+# Local databases & personal knowledge storage
+*.db
+*.sqlite
+*.sqlite3
+data/
+local_vectors/
+downloads/
+temp/
+
+# Runtime states & logs
+reminders.json
+feishu_tasks.json
+*.log
+*.log.*
+*.pid
+
+# Python & Environment
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# OS Specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

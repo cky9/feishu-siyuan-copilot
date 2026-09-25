@@ -1,0 +1,53 @@
+{
+  "feishu": {
+    "app_id": "cli_your_feishu_app_id_here",
+    "app_secret": "your_feishu_app_secret_here"
+  },
+  "siyuan": {
+    "enabled": true,
+    "api_url": "http://127.0.0.1:6806",
+    "token": "your_siyuan_api_token_here",
+    "notebook": "your_notebook_id_here",
+    "notebook_name": "Inbox",
+    "doc_prefix": "Daily Memos & Sparks"
+  },
+  "llm": {
+    "provider": "siliconflow",
+    "api_key": "sk-your_siliconflow_api_key_here",
+    "base_url": "https://api.siliconflow.cn/v1",
+    "model": "deepseek-ai/DeepSeek-V3"
+  },
+  "vlm": {
+    "provider": "zhipu",
+    "api_key": "your_zhipu_api_key_here",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "model": "glm-4v-flash"
+  },
+  "model_providers": {
+    "siliconflow-deepseek": {
+      "name": "SiliconFlow DeepSeek-V3",
+      "provider": "siliconflow",
+      "api_key": "sk-your_siliconflow_api_key_here",
+      "base_url": "https://api.siliconflow.cn/v1",
+      "model": "deepseek-ai/DeepSeek-V3"
+    },
+    "deepseek-official": {
+      "name": "DeepSeek Official API",
+      "provider": "deepseek",
+      "api_key": "sk-your_deepseek_official_key_here",
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat"
+    },
+    "zhipu-free": {
+      "name": "Zhipu GLM-4-Flash (Free Fallback)",
+      "provider": "zhipu",
+      "api_key": "your_zhipu_api_key_here",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "model": "glm-4-flash"
+    }
+  },
+  "custom_hooks": {
+    "somatic_ledger_path": null,
+    "somatic_audit_script": null
+  }
+}

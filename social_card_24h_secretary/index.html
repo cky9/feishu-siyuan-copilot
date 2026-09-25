@@ -1,0 +1,1407 @@
+<!doctype html>
+<html lang="zh-CN" data-accent="ikb">
+<head>
+  <meta charset="utf-8">
+  <title>[必填] 替换为社交卡组标题 · Social Card Set</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=Noto+Sans+SC:wght@200;300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    /* =========================================================
+       Swiss International — Social Card Seed Template
+       ---------------------------------------------------------
+       Three boards built in one HTML:
+         .poster.xhs      1080×1440  (3:4   小红书)
+         .poster.square   1080×1080  (1:1   微信方封面)
+         .poster.wide     2100× 900  (21:9  微信主封面)
+         .pair-preview                       21:9 + 1:1 配对预览
+
+       Accent switching via <html data-accent="…">:
+         ikb (Klein Blue) | lemon-yellow | lemon-green | safety-orange
+
+       Fill posters where marked <!-- POSTERS_HERE -->.
+       Each poster carries one Layout Recipe (S01-S12) from
+       references/layout-recipes.md.
+       ========================================================= */
+
+    /* ---------- 1. Accent palettes (4 mutually exclusive) ---------- */
+    :root,
+    [data-accent="ikb"] {
+      --paper: #fafaf8;
+      --ink: #0a0a0a;
+      --grey-1: #f0f0ee;
+      --grey-2: #d4d4d2;
+      --grey-3: #737373;
+      --accent: #002FA7;
+      --accent-on: #ffffff;
+    }
+    [data-accent="lemon-yellow"] {
+      --paper: #fafaf8;
+      --ink: #0a0a0a;
+      --grey-1: #f0f0ee;
+      --grey-2: #d4d4d2;
+      --grey-3: #737373;
+      --accent: #FFD500;
+      --accent-on: #0a0a0a;
+    }
+    [data-accent="lemon-green"] {
+      --paper: #fafaf8;
+      --ink: #0a0a0a;
+      --grey-1: #f0f0ee;
+      --grey-2: #d4d4d2;
+      --grey-3: #737373;
+      --accent: #C5E803;
+      --accent-on: #0a0a0a;
+    }
+    [data-accent="safety-orange"] {
+      --paper: #fafaf8;
+      --ink: #0a0a0a;
+      --grey-1: #f0f0ee;
+      --grey-2: #d4d4d2;
+      --grey-3: #737373;
+      --accent: #FF6B35;
+      --accent-on: #ffffff;
+    }
+
+    /* ---------- 2. Typography stack ---------- */
+    :root {
+      --sans:    "Inter", "Helvetica Neue", Helvetica, "Noto Sans SC",
+                 -apple-system, "PingFang SC", "Microsoft YaHei UI", sans-serif;
+      --sans-zh: "Noto Sans SC", -apple-system, "PingFang SC",
+                 "Microsoft YaHei UI", "Inter", sans-serif;
+      --mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+    }
+
+    /* ---------- 3. Spacing tokens (8/12/16/24/32/40/48/64/80/96/160) ---------- */
+    :root {
+      --sp-3:   8px;
+      --sp-4:  12px;
+      --sp-5:  16px;
+      --sp-6:  24px;
+      --sp-7:  32px;
+      --sp-8:  40px;
+      --sp-9:  48px;
+      --sp-10: 64px;
+      --sp-11: 80px;
+      --sp-12: 96px;
+      --sp-13:160px;
+    }
+
+    /* ---------- 4. Reset & sheet ---------- */
+    *,*::before,*::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: #1a1a1a;
+      font-family: var(--sans);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      padding: 64px 32px;
+    }
+    .sheet {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 48px;
+    }
+
+    /* ---------- 5. Poster boards (fixed export sizes) ---------- */
+    .poster {
+      position: relative;
+      background: var(--paper);
+      color: var(--ink);
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .poster.xhs    { width: 1080px; height: 1440px; }
+    .poster.square { width: 1080px; height: 1080px; }
+    .poster.wide   { width: 2100px; height:  900px; }
+    .poster figure { margin: 0; }
+
+    .poster.xhs    .content { padding: var(--sp-12) var(--sp-11); }
+    .poster.square .content { padding: var(--sp-11) var(--sp-11); }
+    .poster.wide   .content { padding: var(--sp-11) var(--sp-13); }
+    .content { position: relative; width: 100%; height: 100%; z-index: 2; }
+
+    /* Optional decorative layers — opt in per poster */
+    .dot-mat,
+    .ring-mat,
+    .cross-mat {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .dot-mat {
+      opacity: .08;
+      background-image: radial-gradient(var(--ink) 1.5px, transparent 1.5px);
+      background-size: 24px 24px;
+    }
+    .ring-mat {
+      opacity: .08;
+      background-image: radial-gradient(circle at 50% 50%, transparent 4px, var(--ink) 4.5px, var(--ink) 5px, transparent 5.5px);
+      background-size: 32px 32px;
+    }
+    .cross-mat {
+      opacity: .06;
+      background-image:
+        linear-gradient(var(--ink), var(--ink)),
+        linear-gradient(90deg, var(--ink), var(--ink));
+      background-size: 1px 14px, 14px 1px;
+      background-position: center, center;
+      background-repeat: repeat;
+    }
+
+    /* ---------- 6. Typography roles (Swiss extreme contrast) ----------
+       Hard rule: "the larger, the lighter"
+       ≥ 200px → weight 200 (ExtraLight)
+       Smaller text gets heavier weight (≥ 500). */
+    .h-hero {
+      font-family: var(--sans);
+      font-weight: 200;
+      font-size: 240px;
+      line-height: 1.02;
+      letter-spacing: -.02em;
+      margin: 0;
+      color: var(--ink);
+    }
+    .h-statement {
+      font-family: var(--sans);
+      font-weight: 200;
+      font-size: 180px;
+      line-height: 1.05;
+      letter-spacing: -.015em;
+      margin: 0;
+      color: var(--ink);
+    }
+    .h-xl {
+      font-family: var(--sans);
+      font-weight: 300;
+      font-size: 120px;
+      line-height: 1.08;
+      letter-spacing: -.01em;
+      margin: 0;
+      color: var(--ink);
+    }
+    .h-md {
+      font-family: var(--sans);
+      font-weight: 400;
+      font-size: 56px;
+      line-height: 1.18;
+      margin: 0;
+      color: var(--ink);
+    }
+    .lead {
+      font-family: var(--sans-zh);
+      font-weight: 400;
+      font-size: 30px;
+      line-height: 1.55;
+      color: var(--ink);
+      margin: 0;
+    }
+    .body {
+      font-family: var(--sans-zh);
+      font-weight: 400;
+      font-size: 26px;
+      line-height: 1.6;
+      color: var(--ink);
+      margin: 0;
+    }
+    .t-cat {
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 22px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0;
+    }
+    .t-meta {
+      font-family: var(--mono);
+      font-weight: 500;
+      font-size: 20px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      margin: 0;
+    }
+    .num-mega {
+      font-family: var(--sans);
+      font-weight: 200;
+      font-size: 200px;
+      line-height: .92;
+      letter-spacing: -.03em;
+      color: var(--ink);
+      margin: 0;
+    }
+    .num-xl {
+      font-family: var(--sans);
+      font-weight: 200;
+      font-size: 144px;
+      line-height: .96;
+      letter-spacing: -.02em;
+      margin: 0;
+    }
+    .mono { font-family: var(--mono); }
+
+    /* XHS (3:4) boards: 1080×1440 has the tightest vertical budget,
+       so display sizes step down vs the .wide default. These caps
+       were validated by the smoke-ai-tools deck — 2-line h-xl @96px
+       leaves room for matrix + hero-stat-bottom inside 1440px. */
+    .poster.xhs .h-hero          { font-size: 168px; }
+    .poster.xhs .h-statement     { font-size: 124px; }
+    .poster.xhs .h-xl            { font-size: 96px; }
+    .poster.xhs .num-mega        { font-size: 168px; }
+    .poster.xhs .num-xl          { font-size: 120px; }
+
+    /* Square boards tighten scales */
+    .poster.square .h-hero       { font-size: 180px; }
+    .poster.square .h-statement  { font-size: 140px; }
+    .poster.square .h-xl         { font-size: 88px; }
+    .poster.square .num-mega     { font-size: 168px; }
+    .poster.square .num-xl       { font-size: 112px; }
+
+    /* Wide boards rely on horizontal real estate */
+    .poster.wide .h-hero         { font-size: 200px; }
+    .poster.wide .h-statement    { font-size: 156px; }
+    .poster.wide .h-xl           { font-size: 104px; }
+
+    /* ---------- 7. Layout primitives ---------- */
+    .stack    { display: flex; flex-direction: column; }
+    .row      { display: flex; flex-direction: row; }
+    .gap-3    { gap: var(--sp-3); }
+    .gap-4    { gap: var(--sp-4); }
+    .gap-5    { gap: var(--sp-5); }
+    .gap-6    { gap: var(--sp-6); }
+    .gap-7    { gap: var(--sp-7); }
+    .gap-8    { gap: var(--sp-8); }
+    .gap-9    { gap: var(--sp-9); }
+    .gap-10   { gap: var(--sp-10); }
+    .grow     { flex: 1; }
+    .grid-12  { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--sp-7); }
+    .grid-2-9 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-9); }
+    .grid-3   { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-7); }
+    .grid-4   { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-6); }
+    .span-2   { grid-column: span 2; }
+    .span-3   { grid-column: span 3; }
+    .span-4   { grid-column: span 4; }
+    .span-6   { grid-column: span 6; }
+    .span-8   { grid-column: span 8; }
+    .span-9   { grid-column: span 9; }
+    .span-12  { grid-column: span 12; }
+    .center   { text-align: center; }
+    .right    { text-align: right; }
+    .uppercase{ text-transform: uppercase; }
+    .hr-hairline {
+      height: 1px;
+      background: var(--grey-2);
+      border: 0;
+      margin: 0;
+    }
+    .hr-accent {
+      height: 3px;
+      background: var(--accent);
+      border: 0;
+      width: 96px;
+      margin: 0;
+    }
+
+    /* ---------- 8. Card fills (mutually exclusive — pick ONE) ----------
+       Hard rule: never combine card-ink/card-accent/card-fill/card-outlined
+       on the same node. Multi-card grids must use the same class. */
+    .card-ink {
+      background: var(--ink);
+      color: var(--paper);
+      padding: var(--sp-8);
+    }
+    .card-ink .t-cat,
+    .card-ink .t-meta,
+    .card-ink .lead,
+    .card-ink .body,
+    .card-ink .h-md { color: var(--paper); }
+    .card-accent {
+      background: var(--accent);
+      color: var(--accent-on);
+      padding: var(--sp-8);
+    }
+    .card-accent .t-cat,
+    .card-accent .t-meta,
+    .card-accent .lead,
+    .card-accent .body,
+    .card-accent .h-md { color: var(--accent-on); }
+    .card-fill {
+      background: var(--grey-1);
+      color: var(--ink);
+      padding: var(--sp-8);
+    }
+    .card-outlined {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--grey-2);
+      padding: var(--sp-8);
+    }
+
+    /* ---------- 9. Frame containers (image holders) ---------- */
+    .frame-img {
+      position: relative;
+      overflow: hidden;
+      background: var(--grey-1);
+      display: block;
+      margin: 0;
+    }
+    .frame-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 35%;
+      display: block;
+    }
+    .frame-img.fit-contain img { object-fit: contain; background: var(--paper); }
+    .frame-img.r-3x4   { aspect-ratio: 3 / 4; }
+    .frame-img.r-1x1   { aspect-ratio: 1 / 1; }
+    .frame-img.r-4x3   { aspect-ratio: 4 / 3; }
+    .frame-img.r-16x9  { aspect-ratio: 16 / 9; }
+    .frame-img.r-16x10 { aspect-ratio: 16 / 10; }
+    .frame-img.r-21x9  { aspect-ratio: 21 / 9; }
+    .swiss-img-caption {
+      font-family: var(--mono);
+      font-weight: 500;
+      font-size: 18px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      margin-top: var(--sp-5);
+    }
+
+    /* ---------- 9b. Screenshot treatment (.frame-shot) ---------- */
+    /* Swiss is stricter than Editorial: corners default square, shadows default
+       none. Override only when the shot must literally float off the page.   */
+    .frame-shot {
+      position: relative;
+      overflow: hidden;
+      display: block;
+      margin: 0;
+      background: var(--grey-1);
+      border-radius: 0;
+    }
+    .frame-shot.corners-sq { border-radius: 0; }
+    .frame-shot.corners-sm { border-radius: 4px; }
+    .frame-shot.corners-md { border-radius: 10px; }
+
+    /* Swiss shadows are flat — only the subtle outline scrim is welcome */
+    .frame-shot.shadow-soft { box-shadow: 0 12px 28px -16px rgba(0,0,0,.18); }
+    .frame-shot.shadow-ed   { box-shadow: 0 20px 40px -20px rgba(0,0,0,.22), 0 0 0 1px var(--grey-2); }
+
+    /* background tones — pure / dot / grid only. No accent colour fills. */
+    .frame-shot.bg-paper    { background: var(--paper); }
+    .frame-shot.bg-grey-1   { background: var(--grey-1); }
+    .frame-shot.bg-ink      { background: var(--ink); }
+    .frame-shot.bg-grid     {
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(to right, var(--grey-2) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grey-2) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+    .frame-shot.bg-dot {
+      background-color: var(--paper);
+      background-image: radial-gradient(var(--grey-2) 1px, transparent 1px);
+      background-size: 18px 18px;
+    }
+
+    /* asset backgrounds — ported from PPT skill, real texture for screenshot wells.
+       Use ONLY when current accent matches the asset's accent (don't mix oranges and IKB). */
+    .frame-shot.bg-asset-ikb-dot          { background: #0c1a3a url("../assets/screenshot-backgrounds/style-b/ikb-dot-gradient.webp")       center/cover no-repeat; }
+    .frame-shot.bg-asset-lemon-green-dot  { background: #d6e08a url("../assets/screenshot-backgrounds/style-b/lemon-green-dot-shadow.webp") center/cover no-repeat; }
+    .frame-shot.bg-asset-lemon-grid       { background: #e6e9b8 url("../assets/screenshot-backgrounds/style-b/lemon-grid.webp")             center/cover no-repeat; }
+    .frame-shot.bg-asset-safety-orange    { background: #ff5b1f url("../assets/screenshot-backgrounds/style-b/safety-orange-halftone.webp") center/cover no-repeat; }
+
+    .frame-shot.inset-none > img,
+    .frame-shot.inset-none > .shot-body { padding: 0; }
+    .frame-shot.inset-sub  { padding: 20px; }
+    .frame-shot.inset-bal  { padding: 48px; }
+
+    .frame-shot.r-3x4   { aspect-ratio: 3 / 4; }
+    .frame-shot.r-1x1   { aspect-ratio: 1 / 1; }
+    .frame-shot.r-4x3   { aspect-ratio: 4 / 3; }
+    .frame-shot.r-16x9  { aspect-ratio: 16 / 9; }
+    .frame-shot.r-16x10 { aspect-ratio: 16 / 10; }
+    .frame-shot.r-21x9  { aspect-ratio: 21 / 9; }
+    .frame-shot.r-3x2   { aspect-ratio: 3 / 2; }
+
+    .frame-shot > img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center;
+      display: block;
+      border-radius: inherit;
+    }
+    .frame-shot.fit-cover > img { object-fit: cover; }
+
+    /* device chrome — CSS-only, no SVG */
+    .device-browser {
+      position: relative;
+      background: var(--paper);
+      border: 1px solid var(--grey-2);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .device-browser::before {
+      content: '';
+      display: block;
+      height: 32px;
+      background: var(--grey-1);
+      border-bottom: 1px solid var(--grey-2);
+      background-image:
+        radial-gradient(circle at 16px 16px, var(--grey-3) 4px, transparent 4.5px),
+        radial-gradient(circle at 34px 16px, var(--grey-3) 4px, transparent 4.5px),
+        radial-gradient(circle at 52px 16px, var(--grey-3) 4px, transparent 4.5px);
+    }
+    .device-browser > .frame-shot,
+    .device-browser > img {
+      border-radius: 0;
+      display: block;
+      width: 100%;
+    }
+    .device-phone {
+      position: relative;
+      background: var(--ink);
+      border-radius: 28px;
+      padding: 12px;
+      box-shadow: 0 16px 36px -18px rgba(0,0,0,.32);
+    }
+    .device-phone > .frame-shot,
+    .device-phone > img {
+      border-radius: 18px;
+      display: block;
+      width: 100%;
+    }
+
+    /* ---------- 9c. Map block (.map-block) ---------- */
+    /* Static map for Swiss decks. Pins are pure HTML, no SVG text.
+       Use accent sparingly: at most one accent pin per board. */
+    .map-block {
+      position: relative;
+      background: var(--grey-1);
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+      width: 100%;
+    }
+    .map-block.r-16x10 { aspect-ratio: 16 / 10; }
+    .map-block.r-16x9  { aspect-ratio: 16 / 9; }
+    .map-block.r-1x1   { aspect-ratio: 1 / 1; }
+    .map-block.r-3x4   { aspect-ratio: 3 / 4; }
+    .map-block > img,
+    .map-block > svg {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      display: block;
+    }
+    .map-block > img { object-fit: cover; }
+    /* desaturated tile filter to keep Swiss strict tone */
+    .map-block.tone-paper > img { filter: saturate(0) contrast(1.05) brightness(1.02); }
+    .map-block.tone-ink > img   { filter: saturate(0) brightness(.58); }
+    /* schematic SVG defaults */
+    .map-block > svg .map-coast { fill: none; stroke: var(--grey-2); stroke-width: .4; }
+    .map-block > svg .map-road  { fill: none; stroke: var(--grey-3); stroke-width: .28; stroke-dasharray: 1.2 .8; opacity: .7; }
+    .map-block > svg .map-water { fill: var(--grey-1); }
+    .map-block > svg .map-grid  { stroke: var(--grey-2); stroke-width: .15; opacity: .5; }
+
+    .map-pin {
+      position: absolute;
+      width: 0; height: 0;
+      transform: translate(-50%, -50%);
+    }
+    .map-pin .dot {
+      position: absolute;
+      left: -6px; top: -6px;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--ink);
+      border: 2px solid var(--paper);
+      box-shadow: 0 1px 3px rgba(0,0,0,.22);
+    }
+    .map-pin.accent .dot { background: var(--accent); }
+    .map-pin .line {
+      position: absolute;
+      left: 7px; top: 0;
+      width: 28px; height: 1px;
+      background: var(--ink);
+      opacity: .55;
+    }
+    .map-pin.left .line { left: auto; right: 7px; }
+    .map-pin .card {
+      position: absolute;
+      left: 38px; top: -20px;
+      min-width: 80px;
+      padding: 8px 10px;
+      background: rgba(250,250,248,.94);
+      box-shadow: 0 0 0 1px var(--grey-2);
+      border-radius: 2px;
+      white-space: nowrap;
+    }
+    .map-pin.left .card { left: auto; right: 38px; }
+    .map-pin .card .name {
+      font-family: var(--sans-zh), var(--sans);
+      font-weight: 500;
+      font-size: 15px;
+      line-height: 1.1;
+      color: var(--ink);
+    }
+    .map-pin .card .meta {
+      display: block;
+      margin-top: 4px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+    }
+    .map-pin.accent .card .name { color: var(--accent); }
+
+    .map-legend {
+      position: absolute;
+      left: 14px; bottom: 14px;
+      z-index: 3;
+      background: rgba(250,250,248,.94);
+      padding: 8px 12px;
+      box-shadow: 0 0 0 1px var(--grey-2);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+    }
+    .map-legend.tr { left: auto; right: 14px; top: 14px; bottom: auto; }
+
+    /* ---------- 10. Swiss-specific components ---------- */
+
+    /* S08 Image Hero (port of S22) */
+    .image-hero {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: var(--sp-7);
+      height: 100%;
+    }
+    .image-hero .hero-img-wrap {
+      position: relative;
+      overflow: hidden;
+      background: var(--grey-1);
+    }
+    .image-hero .hero-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 35%;
+      display: block;
+    }
+    .image-hero .hero-overlay-block {
+      position: absolute;
+      left: 0;
+      top: 0;
+      background: var(--paper);
+      padding: var(--sp-7) var(--sp-8);
+      max-width: 60%;
+    }
+    .image-hero .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--sp-8);
+      align-items: end;
+      border-top: 1px solid var(--grey-2);
+      padding-top: var(--sp-7);
+    }
+    .image-hero .hero-stats .stat-block .num {
+      font-family: var(--sans);
+      font-weight: 200;
+      font-size: 96px;
+      line-height: 1;
+      letter-spacing: -.02em;
+      color: var(--ink);
+      margin: 0 0 var(--sp-4);
+    }
+    .image-hero .hero-stats .stat-block .lbl {
+      font-family: var(--mono);
+      font-size: 18px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      margin: 0;
+    }
+
+    /* S09 KPI Tower (port of S06) */
+    .kpi-tower-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--sp-7);
+      align-items: end;
+      height: 100%;
+    }
+    .kpi-tower-row .tower-col {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-5);
+      align-items: flex-start;
+    }
+    .kpi-tower-row .tower-col .num {
+      font-family: var(--sans);
+      font-weight: 200;
+      font-size: 112px;
+      line-height: 1;
+      letter-spacing: -.02em;
+      margin: 0;
+    }
+    .kpi-tower-row .tower-col .lbl {
+      font-family: var(--mono);
+      font-size: 20px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      margin: 0;
+    }
+    .kpi-tower-row .tower-col .bar-tower {
+      width: 100%;
+      height: var(--h, 240px);
+      background: var(--accent);
+      transform-origin: bottom;
+    }
+    .kpi-tower-row .tower-col.muted .bar-tower {
+      background: var(--grey-2);
+    }
+    .poster.xhs .kpi-tower-row { grid-template-columns: 1fr 1fr; gap: var(--sp-9); }
+    .poster.square .kpi-tower-row { grid-template-columns: 1fr 1fr; gap: var(--sp-9); }
+
+    /* S10 H-Bar Chart (port of S07) */
+    .h-bar-chart {
+      display: grid;
+      gap: var(--sp-6);
+    }
+    .h-bar-chart .bar-row {
+      display: grid;
+      grid-template-columns: 220px 1fr 120px;
+      gap: var(--sp-6);
+      align-items: center;
+    }
+    .h-bar-chart .bar-row .row-lbl {
+      font-family: var(--sans-zh);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--ink);
+    }
+    .h-bar-chart .bar-row .row-track {
+      position: relative;
+      height: 28px;
+      background: var(--grey-1);
+    }
+    .h-bar-chart .bar-row .row-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: var(--w, 50%);
+      background: var(--accent);
+    }
+    .h-bar-chart .bar-row .row-val {
+      font-family: var(--mono);
+      font-weight: 500;
+      font-size: 26px;
+      letter-spacing: .04em;
+      text-align: right;
+      color: var(--ink);
+    }
+    /* On portrait the labels move above the track */
+    .poster.xhs .h-bar-chart .bar-row {
+      grid-template-columns: 1fr;
+      gap: var(--sp-4);
+    }
+    .poster.xhs .h-bar-chart .bar-row .row-val {
+      text-align: left;
+    }
+
+    /* S11 Stacked Ledger (port of S20) */
+    .stacked-ledger {
+      display: flex;
+      flex-direction: column;
+    }
+    .stacked-ledger .ledger-row {
+      display: grid;
+      grid-template-columns: 280px 1fr auto;
+      gap: var(--sp-7);
+      align-items: baseline;
+      padding: var(--sp-7) 0;
+      border-bottom: 1px solid var(--grey-2);
+    }
+    .stacked-ledger .ledger-row:first-child { padding-top: 0; }
+    .stacked-ledger .ledger-row:last-child  { border-bottom: 0; }
+    .stacked-ledger .ledger-num {
+      font-family: var(--sans);
+      font-weight: 200;
+      font-size: 112px;
+      line-height: 1;
+      letter-spacing: -.02em;
+      margin: 0;
+    }
+    .stacked-ledger .ledger-lbl {
+      font-family: var(--sans-zh);
+      font-weight: 500;
+      font-size: 30px;
+      line-height: 1.3;
+      color: var(--ink);
+    }
+    .stacked-ledger .ledger-lbl .sub {
+      display: block;
+      font-weight: 400;
+      font-size: 22px;
+      color: var(--grey-3);
+      margin-top: var(--sp-3);
+    }
+    .stacked-ledger .ledger-icn {
+      width: 56px;
+      height: 56px;
+      color: var(--accent);
+    }
+    .poster.square .stacked-ledger .ledger-num { font-size: 88px; }
+    .poster.square .stacked-ledger .ledger-row { grid-template-columns: 220px 1fr auto; }
+
+    /* S12 Matrix Fill (port of S15) */
+    .matrix-fill {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-auto-rows: 1fr;
+      gap: var(--sp-5);
+    }
+    .matrix-fill .matrix-cell {
+      background: var(--grey-1);
+      padding: var(--sp-6);
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-4);
+      min-height: 160px;
+    }
+    .matrix-fill .matrix-cell .cell-nb {
+      font-family: var(--mono);
+      font-size: 18px;
+      letter-spacing: .12em;
+      color: var(--grey-3);
+    }
+    .matrix-fill .matrix-cell .cell-title {
+      font-family: var(--sans-zh);
+      font-weight: 500;
+      font-size: 26px;
+      line-height: 1.3;
+      color: var(--ink);
+    }
+    .matrix-fill .matrix-cell.is-accent {
+      background: var(--accent);
+      color: var(--accent-on);
+    }
+    .matrix-fill .matrix-cell.is-accent .cell-nb,
+    .matrix-fill .matrix-cell.is-accent .cell-title { color: var(--accent-on); }
+    .hero-stat-bottom {
+      margin-top: var(--sp-9);
+      padding-top: var(--sp-7);
+      border-top: 1px solid var(--grey-2);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: var(--sp-7);
+    }
+    /* xhs uses 2 columns; up to 8 cells = 4 rows. Switch to min-content
+       so rows don't stretch and crowd out hero-stat-bottom (validated
+       in smoke-ai-tools/xhs-04). When pairing matrix-fill with
+       hero-stat-bottom inside .poster.xhs, prefer 6 cells (3 rows). */
+    .poster.xhs .matrix-fill {
+      grid-template-columns: repeat(2, 1fr);
+      grid-auto-rows: min-content;
+      gap: var(--sp-4);
+    }
+    .poster.xhs .matrix-fill .matrix-cell { min-height: 0; padding: var(--sp-5); }
+    .poster.xhs .matrix-fill .matrix-cell .cell-title { font-size: 24px; }
+    .poster.xhs .hero-stat-bottom {
+      margin-top: var(--sp-6);
+      padding-top: var(--sp-5);
+      align-items: center;
+    }
+    .poster.xhs .hero-stat-bottom .num-mega { font-size: 128px; line-height: 1; }
+    .poster.square .matrix-fill{ grid-template-columns: repeat(3, 1fr); grid-auto-rows: auto; }
+    .poster.square .matrix-fill .matrix-cell { min-height: 0; }
+
+    /* ---------- 11. Issue label + corner metadata ---------- */
+    .chrome-min {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 18px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      padding-bottom: var(--sp-6);
+      border-bottom: 1px solid var(--grey-2);
+      margin-bottom: var(--sp-9);
+    }
+
+    /* ---------- 12. Pair preview frame ---------- */
+    .pair-preview {
+      width: 2400px;
+      min-height: 1180px;
+      background: var(--grey-1);
+      padding: var(--sp-9);
+      display: grid;
+      grid-template-columns: 2100px 1080px;
+      grid-template-rows: 900px 1080px;
+      gap: var(--sp-9);
+      align-content: center;
+      justify-content: center;
+    }
+    .pair-preview .preview-wide   { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+    .pair-preview .preview-square { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+    .pair-preview .preview-label {
+      font-family: var(--mono);
+      font-weight: 500;
+      font-size: 18px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      margin-bottom: var(--sp-5);
+    }
+
+    /* ---------- 13. Hard rules (visual guard rails) ----------
+       Swiss style refuses these — uncomment to find offenders.
+    .poster *[style*="border-radius"],
+    .poster *[style*="box-shadow"],
+    .poster *[style*="linear-gradient"] { outline: 4px solid red !important; }
+    */
+  </style>
+</head>
+<body>
+  <!-- ACCENT_OVERRIDE
+       Change <html data-accent="…"> above to:
+       ikb | lemon-yellow | lemon-green | safety-orange
+       One deck — one accent. Never combine.
+  -->
+  <main class="sheet">
+
+    <!-- POSTERS_HERE -->
+    <!--
+      Replace the placeholder poster below with real content.
+      Each poster carries one Layout Recipe (S01-S12) from
+      references/layout-recipes.md.
+
+      Available board sizes:
+        <section class="poster xhs"    id="xhs-01">…</section>   3:4
+        <section class="poster square" id="wechat-1x1">…</section> 1:1
+        <section class="poster wide"   id="wechat-21x9">…</section> 21:9
+
+      For WeChat covers, also include a <section class="pair-preview">
+      that places the 21:9 + 1:1 side-by-side for review.
+
+      Hard rules every poster must honor:
+        - exactly one --accent in the entire deck
+        - no border-radius, no box-shadow, no gradients
+        - card-ink / card-accent / card-fill / card-outlined are
+          mutually exclusive — never combine on one node
+        - "the larger, the lighter": ≥ 200px must use weight 200
+    -->
+
+    <!-- ============================================================
+         Placeholder: S01 Accent Cover (3:4)
+         Replace with real cover content from layout-recipes.md.
+         ============================================================ -->
+    <section class="poster xhs" id="ai-secretary-24h" style="padding: 72px 80px; display: flex; flex-direction: column; justify-content: space-between;">
+      <div class="stack gap-7">
+        <!-- 顶部元信息条 -->
+        <div class="chrome-min" style="margin-bottom: 0; padding-bottom: 20px;">
+          <span>SYSTEM TOPOLOGY · VOL. 24</span>
+          <span>AUTONOMOUS AGENT</span>
+          <span>2026 LOCAL-FIRST</span>
+        </div>
+
+        <!-- 主标题与核心定位 -->
+        <div class="stack gap-4">
+          <p class="t-cat" style="font-size: 20px; letter-spacing: 0.16em;">全天候个人执行顾问 · 24/7 EXECUTIVE COPILOT</p>
+          <h1 class="h-statement" style="font-size: 88px; line-height: 1.02; letter-spacing: -0.03em;">24小时<br>AI 秘书</h1>
+        </div>
+
+        <hr class="hr-accent" style="margin: 0; border: none; height: 3px; background: var(--accent);">
+
+        <p class="lead" style="font-size: 24px; line-height: 1.45; color: var(--ink); margin: 0; font-weight: 400;">
+          零阻力倾倒灵感 × 本地思源私密沉淀 × 主动备忘闹钟 × 大模型全天复盘
+        </p>
+
+        <!-- 四大核心链路模块 (2x2 瑞士工程网格) -->
+        <div class="matrix-fill" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;">
+          <!-- 模块 01 -->
+          <div class="matrix-cell" style="padding: 24px; background: var(--grey-1); border-left: 3px solid var(--accent); display: flex; flex-direction: column; justify-content: space-between; min-height: 190px;">
+            <div>
+              <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                <span class="cell-nb" style="color: var(--accent); font-weight: 600;">01 / INTAKE</span>
+                <span style="font-family: var(--mono); font-size: 13px; color: var(--grey-3);">FEISHU BOT</span>
+              </div>
+              <div class="cell-title" style="font-size: 24px; font-weight: 600; margin-bottom: 8px;">极速捕获 · 随手倾倒</div>
+              <div style="font-size: 16px; line-height: 1.45; color: var(--grey-3);">
+                手机飞书随时单聊。支持高精语音转文字与图文，WebSocket 长连接直连 Mac，免公网 IP 与穿透。
+              </div>
+            </div>
+          </div>
+
+          <!-- 模块 02 -->
+          <div class="matrix-cell" style="padding: 24px; background: var(--grey-1); border-left: 3px solid var(--ink); display: flex; flex-direction: column; justify-content: space-between; min-height: 190px;">
+            <div>
+              <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                <span class="cell-nb" style="font-weight: 600;">02 / STORAGE</span>
+                <span style="font-family: var(--mono); font-size: 13px; color: var(--grey-3);">SIYUAN LOCAL</span>
+              </div>
+              <div class="cell-title" style="font-size: 24px; font-weight: 600; margin-bottom: 8px;">思源笔记 · 本地私密</div>
+              <div style="font-size: 16px; line-height: 1.45; color: var(--grey-3);">
+                一天一文档（Daily Note），时间戳 Block 块级追加。100% 存储于本地外置盘，彻底告别云端泄露。
+              </div>
+            </div>
+          </div>
+
+          <!-- 模块 03 -->
+          <div class="matrix-cell" style="padding: 24px; background: var(--grey-1); border-left: 3px solid var(--accent); display: flex; flex-direction: column; justify-content: space-between; min-height: 190px;">
+            <div>
+              <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                <span class="cell-nb" style="color: var(--accent); font-weight: 600;">03 / PROACTIVE</span>
+                <span style="font-family: var(--mono); font-size: 13px; color: var(--grey-3);">SCHEDULER</span>
+              </div>
+              <div class="cell-title" style="font-size: 24px; font-weight: 600; margin-bottom: 8px;">备忘闹钟 · 主动弹窗</div>
+              <div style="font-size: 16px; line-height: 1.45; color: var(--grey-3);">
+                支持“半小时后拿快递”、“明天9点开会”等任意口语。到期后台毫秒级主动在飞书震动弹窗提醒。
+              </div>
+            </div>
+          </div>
+
+          <!-- 模块 04 -->
+          <div class="matrix-cell" style="padding: 24px; background: var(--grey-1); border-left: 3px solid var(--ink); display: flex; flex-direction: column; justify-content: space-between; min-height: 190px;">
+            <div>
+              <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+                <span class="cell-nb" style="font-weight: 600;">04 / COGNITION</span>
+                <span style="font-family: var(--mono); font-size: 13px; color: var(--grey-3);">SILICONFLOW</span>
+              </div>
+              <div class="cell-title" style="font-size: 24px; font-weight: 600; margin-bottom: 8px;">随时复盘 · 行动萃取</div>
+              <div style="font-size: 16px; line-height: 1.45; color: var(--grey-3);">
+                随时发「总结今天」，大模型执行思源 SQL 抽取今日碎片，比对日程生成深度复盘并自动归档入库。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 大核心技术指标 (KPI Band) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; border-top: 1px solid var(--grey-2); border-bottom: 1px solid var(--grey-2); padding: 24px 0;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 14px; color: var(--grey-3); text-transform: uppercase;">API EXPENDITURE</div>
+            <div style="font-family: var(--sans); font-size: 44px; font-weight: 300; color: var(--accent); margin-top: 4px;">0 元</div>
+            <div style="font-size: 13px; color: var(--grey-3); margin-top: 2px;">Qwen-7B 永久免费驱动</div>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 14px; color: var(--grey-3); text-transform: uppercase;">DATA PRIVACY</div>
+            <div style="font-family: var(--sans); font-size: 44px; font-weight: 300; color: var(--ink); margin-top: 4px;">100%</div>
+            <div style="font-size: 13px; color: var(--grey-3); margin-top: 2px;">Mac 本地思源 SQLite 存储</div>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 14px; color: var(--grey-3); text-transform: uppercase;">SERVICE UPTIME</div>
+            <div style="font-family: var(--sans); font-size: 44px; font-weight: 300; color: var(--ink); margin-top: 4px;">24 H</div>
+            <div style="font-size: 13px; color: var(--grey-3); margin-top: 2px;">毫秒级长连接后台守护</div>
+          </div>
+        </div>
+
+        <!-- 24小时闭环心流条带 (24-Hour Closed Loop Strip) -->
+        <div style="margin-top: 16px; padding: 20px 24px; background: var(--grey-1); border-left: 3px solid var(--accent); display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: 0.1em;">MORNING · 08:30</span>
+            <span style="font-size: 15px; font-weight: 500; color: var(--ink);">同步微软日历背景</span>
+          </div>
+          <span style="font-family: var(--mono); color: var(--grey-3); font-size: 16px;">→</span>
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: 0.1em;">DAYTIME · REALTIME</span>
+            <span style="font-size: 15px; font-weight: 500; color: var(--ink);">随手记与待办弹窗</span>
+          </div>
+          <span style="font-family: var(--mono); color: var(--grey-3); font-size: 16px;">→</span>
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: 0.1em;">NIGHT · 22:30</span>
+            <span style="font-size: 15px; font-weight: 500; color: var(--ink);">呼唤全天深度复盘</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部 Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--grey-2); padding-top: 20px; font-family: var(--mono); font-size: 14px; color: var(--grey-3); letter-spacing: 0.1em; text-transform: uppercase;">
+        <span>FEISHU × SIYUAN × SILICONFLOW</span>
+        <span>DEPLOYED ON MACOS · PID DAEMON</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Card 02: 核心技术栈全景 (The Deep Tech Stack)
+         ============================================================ -->
+    <section class="poster xhs" id="tech-stack-02" style="padding: 72px 80px; display: flex; flex-direction: column; justify-content: space-between;">
+      <div class="stack gap-7">
+        <!-- 顶部元信息条 -->
+        <div class="chrome-min" style="margin-bottom: 0; padding-bottom: 20px;">
+          <span>CARD 02/05 · TECH STACK</span>
+          <span>UNDER THE HOOD</span>
+          <span>INDUSTRIAL MINIMALISM</span>
+        </div>
+
+        <!-- 主标题 -->
+        <div class="stack gap-4">
+          <p class="t-cat" style="font-size: 20px; letter-spacing: 0.16em;">底层架构全景 · FIVE-TIER ARCHITECTURE</p>
+          <h1 class="h-statement" style="font-size: 84px; line-height: 1.02; letter-spacing: -0.03em;">5 层核心<br>技术栈</h1>
+        </div>
+
+        <hr class="hr-accent" style="margin: 0; border: none; height: 3px; background: var(--accent);">
+
+        <p class="lead" style="font-size: 22px; line-height: 1.45; color: var(--ink); margin: 0;">
+          从无感穿透到本地存储，用最克制、最轻量的工业级技术组合消灭网络与隐私死穴。
+        </p>
+
+        <!-- 5 层技术栈清单 -->
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 4px;">
+          <!-- 01 传输协议 -->
+          <div style="background: var(--grey-1); padding: 18px 24px; border-left: 3px solid var(--accent); display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center;">
+            <div>
+              <span style="font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600;">01 / TRANSPORT</span>
+              <div style="font-size: 20px; font-weight: 600; margin-top: 2px;">飞书 WebSocket</div>
+            </div>
+            <div style="font-size: 15px; color: var(--grey-3); line-height: 1.4;">
+              官方长连接协议。Mac 直连边缘网关（msg-frontier），<strong style="color:var(--ink);">免公网 IP 与端口映射</strong>，任何 WiFi 开机即秒连。
+            </div>
+          </div>
+
+          <!-- 02 本地数据 -->
+          <div style="background: var(--grey-1); padding: 18px 24px; border-left: 3px solid var(--ink); display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center;">
+            <div>
+              <span style="font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 600;">02 / STORAGE</span>
+              <div style="font-size: 20px; font-weight: 600; margin-top: 2px;">思源 SQLite REST</div>
+            </div>
+            <div style="font-size: 15px; color: var(--grey-3); line-height: 1.4;">
+              本地 6806 内核直连。Block 块级时间轴追加，<strong style="color:var(--ink);">100% 存储于本地外置硬盘</strong>，彻底阻断云端数据泄露风险。
+            </div>
+          </div>
+
+          <!-- 03 调度引擎 -->
+          <div style="background: var(--grey-1); padding: 18px 24px; border-left: 3px solid var(--accent); display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center;">
+            <div>
+              <span style="font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600;">03 / SCHEDULER</span>
+              <div style="font-size: 20px; font-weight: 600; margin-top: 2px;">Python Threading</div>
+            </div>
+            <div style="font-size: 15px; color: var(--grey-3); line-height: 1.4;">
+              轻量守护线程（Daemon）。每 2 秒高频扫描提醒队列，到期<strong style="color:var(--ink);">主动向飞书发起推送（CreateMessage）</strong>。
+            </div>
+          </div>
+
+          <!-- 04 日程协同 -->
+          <div style="background: var(--grey-1); padding: 18px 24px; border-left: 3px solid var(--ink); display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center;">
+            <div>
+              <span style="font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 600;">04 / CALENDAR</span>
+              <div style="font-size: 20px; font-weight: 600; margin-top: 2px;">RFC 5545 iCal</div>
+            </div>
+            <div style="font-size: 15px; color: var(--grey-3); line-height: 1.4;">
+              通过 Outlook 网页版 ICS 私密发布链接直读，<strong style="color:var(--ink);">免 Azure 企业开发者注册</strong>，轻量提取当天会议排期。
+            </div>
+          </div>
+
+          <!-- 05 认知推理 -->
+          <div style="background: var(--grey-1); padding: 18px 24px; border-left: 3px solid var(--accent); display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center;">
+            <div>
+              <span style="font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600;">05 / INFERENCE</span>
+              <div style="font-size: 20px; font-weight: 600; margin-top: 2px;">SiliconFlow API</div>
+            </div>
+            <div style="font-size: 15px; color: var(--grey-3); line-height: 1.4;">
+              硅基流动 OpenAI 兼容网关。<strong style="color:var(--accent);">Qwen2.5-7B（0元免费毫秒级）</strong>日常待办 + <strong style="color:var(--ink);">DeepSeek-V3</strong> 深度长文复盘。
+            </div>
+          </div>
+        </div>
+
+        <!-- 技术栈横向标签条 -->
+        <div style="display: flex; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--grey-2); font-family: var(--mono); font-size: 13px; color: var(--grey-3);">
+          <span>PYTHON 3.9</span>
+          <span>•</span>
+          <span>LARK-OAPI 1.7</span>
+          <span>•</span>
+          <span>SQLITE 3</span>
+          <span>•</span>
+          <span>RECURRING-ICAL</span>
+          <span>•</span>
+          <span>REST & WEBSOCKET</span>
+        </div>
+      </div>
+
+      <!-- 底部 Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--grey-2); padding-top: 20px; font-family: var(--mono); font-size: 14px; color: var(--grey-3); letter-spacing: 0.1em; text-transform: uppercase;">
+        <span>PAGE 02 OF 05 · TECH STACK</span>
+        <span>DEPLOYED ON MACOS · ZERO CLOUD VENDOR LOCK-IN</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Card 03: 备忘闹钟与 NLP 口语时间解析引擎 (Proactive Scheduler)
+         ============================================================ -->
+    <section class="poster xhs" id="proactive-scheduler-03" style="padding: 72px 80px; display: flex; flex-direction: column; justify-content: space-between;">
+      <div class="stack gap-7">
+        <!-- 顶部元信息条 -->
+        <div class="chrome-min" style="margin-bottom: 0; padding-bottom: 20px;">
+          <span>CARD 03/05 · PROACTIVE SCHEDULER</span>
+          <span>AUTONOMOUS DISPATCH</span>
+          <span>BIDIRECTIONAL LOOP</span>
+        </div>
+
+        <!-- 主标题 -->
+        <div class="stack gap-4">
+          <p class="t-cat" style="font-size: 20px; letter-spacing: 0.16em;">主动触达系统 · PROACTIVE MECHANISM</p>
+          <h1 class="h-statement" style="font-size: 84px; line-height: 1.02; letter-spacing: -0.03em;">口语闹钟<br>& 主动提醒</h1>
+        </div>
+
+        <hr class="hr-accent" style="margin: 0; border: none; height: 3px; background: var(--accent);">
+
+        <p class="lead" style="font-size: 22px; line-height: 1.45; color: var(--ink); margin: 0;">
+          打破传统 AI 只能被动等问的局限。随心口语倾倒，后台毫秒级巡检并主动在飞书震动弹窗。
+        </p>
+
+        <!-- 双核解析与动作卡片 (2 列网格) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 4px;">
+          <div style="background: var(--grey-1); padding: 22px; border-left: 3px solid var(--accent);">
+            <div style="font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 6px;">NLP DUAL-ENGINE</div>
+            <div style="font-size: 22px; font-weight: 600; margin-bottom: 8px;">中文口语零歧义解析</div>
+            <div style="font-size: 15px; color: var(--grey-3); line-height: 1.45;">
+              同时支持汉字数字（“一分钟之后”、“半小时后”）与绝对时刻（“下午3点半”）。本地离线正则极速计算 + 大模型意图兜底。
+            </div>
+          </div>
+          <div style="background: var(--grey-1); padding: 22px; border-left: 3px solid var(--ink);">
+            <div style="font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 600; margin-bottom: 6px;">ACTIVE DISPATCH</div>
+            <div style="font-size: 22px; font-weight: 600; margin-bottom: 8px;">客户端主动弹窗触达</div>
+            <div style="font-size: 15px; color: var(--grey-3); line-height: 1.45;">
+              突破传统被动回复（Reply）。调度器到点主动调用飞书 CreateMessage 接口，直接向手机推送带醒目标题的振动通知。
+            </div>
+          </div>
+        </div>
+
+        <!-- 状态机闭环 (State Machine Pipeline) -->
+        <div style="background: var(--paper); border: 1px solid var(--grey-2); padding: 20px 24px;">
+          <div style="font-family: var(--mono); font-size: 13px; color: var(--grey-3); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.1em;">
+            LIFECYCLE · 任务生命周期闭环
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 12px; align-items: center;">
+            <div style="background: var(--grey-1); padding: 14px; text-align: center;">
+              <span style="font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600;">STATUS: 01</span>
+              <div style="font-size: 16px; font-weight: 600; margin-top: 2px;">口语设定</div>
+              <div style="font-size: 12px; color: var(--grey-3);">持久化至 reminders.json</div>
+            </div>
+            <span style="font-family: var(--mono); color: var(--grey-3);">→</span>
+            <div style="background: var(--grey-1); padding: 14px; text-align: center;">
+              <span style="font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 600;">STATUS: 02</span>
+              <div style="font-size: 16px; font-weight: 600; margin-top: 2px;">到点主动推送</div>
+              <div style="font-size: 12px; color: var(--grey-3);">手机飞书收到弹窗</div>
+            </div>
+            <span style="font-family: var(--mono); color: var(--grey-3);">→</span>
+            <div style="background: var(--grey-1); padding: 14px; text-align: center;">
+              <span style="font-family: var(--mono); font-size: 12px; color: var(--ink); font-weight: 600;">STATUS: 03</span>
+              <div style="font-size: 16px; font-weight: 600; margin-top: 2px;">思源双向打勾</div>
+              <div style="font-size: 12px; color: var(--grey-3);">自动标记今日待办完成</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 典型口语用例对照表 -->
+        <div style="display: flex; flex-direction: column; gap: 8px; font-family: var(--mono); font-size: 14px;">
+          <div style="padding: 10px 14px; background: var(--grey-1); display: flex; justify-content: space-between;">
+            <span style="color: var(--ink);">“一分钟之后发条信息给我说你好”</span>
+            <span style="color: var(--accent); font-weight: 600;">+60s 倒计时推送</span>
+          </div>
+          <div style="padding: 10px 14px; background: var(--grey-1); display: flex; justify-content: space-between;">
+            <span style="color: var(--ink);">“下午3点半提醒我和张总对方案”</span>
+            <span style="color: var(--accent); font-weight: 600;">15:30 准点弹窗</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部 Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--grey-2); padding-top: 20px; font-family: var(--mono); font-size: 14px; color: var(--grey-3); letter-spacing: 0.1em; text-transform: uppercase;">
+        <span>PAGE 03 OF 05 · SCHEDULER</span>
+        <span>MILLIS-ACCURACY DISPATCH · ZERO POLLING LAG</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Card 04: 本地思源知识库与 SQL 认知复盘 (SiYuan & SQL)
+         ============================================================ -->
+    <section class="poster xhs" id="siyuan-sql-04" style="padding: 72px 80px; display: flex; flex-direction: column; justify-content: space-between;">
+      <div class="stack gap-7">
+        <!-- 顶部元信息条 -->
+        <div class="chrome-min" style="margin-bottom: 0; padding-bottom: 20px;">
+          <span>CARD 04/05 · KNOWLEDGE BASE</span>
+          <span>BLOCK-LEVEL DATABASE</span>
+          <span>SQL-POWERED REVIEW</span>
+        </div>
+
+        <!-- 主标题 -->
+        <div class="stack gap-4">
+          <p class="t-cat" style="font-size: 20px; letter-spacing: 0.16em;">本地数据层与复盘引擎 · DATA & COGNITION</p>
+          <h1 class="h-statement" style="font-size: 84px; line-height: 1.02; letter-spacing: -0.03em;">思源数据层<br>& SQL 复盘</h1>
+        </div>
+
+        <hr class="hr-accent" style="margin: 0; border: none; height: 3px; background: var(--accent);">
+
+        <p class="lead" style="font-size: 22px; line-height: 1.45; color: var(--ink); margin: 0;">
+          为什么块级数据库远胜平铺 Markdown？夜间随时呼唤大模型，从碎片中萃取认知增量。
+        </p>
+
+        <!-- 为什么是一天一文档 (哲学对比) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 4px;">
+          <div style="padding: 20px; background: var(--grey-1); border-left: 3px solid var(--grey-3);">
+            <span style="font-family: var(--mono); font-size: 13px; color: var(--grey-3); font-weight: 600;">ANTI-PATTERN</span>
+            <div style="font-size: 20px; font-weight: 600; margin: 4px 0 6px;">❌ 一想法一文档</div>
+            <div style="font-size: 14px; color: var(--grey-3); line-height: 1.4;">
+              年产生 1000+ 琐碎文件，侧边栏彻底爆炸，分类负担极重，最后沦为从不打开的信息垃圾堆。
+            </div>
+          </div>
+          <div style="padding: 20px; background: var(--grey-1); border-left: 3px solid var(--accent);">
+            <span style="font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600;">BEST PRACTICE</span>
+            <div style="font-size: 20px; font-weight: 600; margin: 4px 0 6px;">✅ 一天一文档 · 块级流</div>
+            <div style="font-size: 14px; color: var(--ink); line-height: 1.4;">
+              每日唯一文档，每条点滴作为 Block 块级追加。形成自然心流时间轴，未来可被任意双链引用。
+            </div>
+          </div>
+        </div>
+
+        <!-- SQL 深度复盘四维模型 -->
+        <div style="background: var(--grey-1); padding: 24px; border-left: 3px solid var(--accent);">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+            <div style="font-size: 20px; font-weight: 600;">大模型 4 维深度复盘体系</div>
+            <span style="font-family: var(--mono); font-size: 12px; color: var(--grey-3);">触发词:「总结今天」/「/分析」</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div style="border-top: 1px solid var(--grey-2); padding-top: 10px;">
+              <span style="font-weight: 600; color: var(--accent);">01 · 全景认知主题</span>
+              <div style="font-size: 14px; color: var(--grey-3); margin-top: 2px;">概括全天精力投向与重点关注领域</div>
+            </div>
+            <div style="border-top: 1px solid var(--grey-2); padding-top: 10px;">
+              <span style="font-weight: 600; color: var(--ink);">02 · 待办推进清单</span>
+              <div style="font-size: 14px; color: var(--grey-3); margin-top: 2px;">汇总碎片中遗漏或产生的 TODO 事项</div>
+            </div>
+            <div style="border-top: 1px solid var(--grey-2); padding-top: 10px;">
+              <span style="font-weight: 600; color: var(--ink);">03 · 精力执行反思</span>
+              <div style="font-size: 14px; color: var(--grey-3); margin-top: 2px;">比对微软日程与实际记录，指出时间黑洞</div>
+            </div>
+            <div style="border-top: 1px solid var(--grey-2); padding-top: 10px;">
+              <span style="font-weight: 600; color: var(--accent);">04 · 高杠杆明日建议</span>
+              <div style="font-size: 14px; color: var(--grey-3); margin-top: 2px;">提炼 1-2 条最具杠杆效应的高价值建议</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SQL 语句展示 -->
+        <div style="padding: 12px 16px; background: var(--ink); color: #fff; font-family: var(--mono); font-size: 13px; display: flex; justify-content: space-between;">
+          <span style="color: #8be9fd;">SELECT content, updated FROM blocks WHERE root_id=today_doc ORDER BY updated ASC;</span>
+        </div>
+      </div>
+
+      <!-- 底部 Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--grey-2); padding-top: 20px; font-family: var(--mono); font-size: 14px; color: var(--grey-3); letter-spacing: 0.1em; text-transform: uppercase;">
+        <span>PAGE 04 OF 05 · DATA & COGNITION</span>
+        <span>SIYUAN LOCAL KERNEL 6806 · SQL-DRIVEN AGENT</span>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Card 05: 极简本地部署与零成本运维 (Zero-Cost Deployment & Ops)
+         ============================================================ -->
+    <section class="poster xhs" id="deployment-ops-05" style="padding: 72px 80px; display: flex; flex-direction: column; justify-content: space-between;">
+      <div class="stack gap-7">
+        <!-- 顶部元信息条 -->
+        <div class="chrome-min" style="margin-bottom: 0; padding-bottom: 20px;">
+          <span>CARD 05/05 · OPERATIONS & SETUP</span>
+          <span>ZERO-MAINTENANCE</span>
+          <span>FULLY SOVEREIGN</span>
+        </div>
+
+        <!-- 主标题 -->
+        <div class="stack gap-4">
+          <p class="t-cat" style="font-size: 20px; letter-spacing: 0.16em;">部署与运维手册 · DEPLOYMENT & OPS</p>
+          <h1 class="h-statement" style="font-size: 84px; line-height: 1.02; letter-spacing: -0.03em;">极简部署<br>& 零元运维</h1>
+        </div>
+
+        <hr class="hr-accent" style="margin: 0; border: none; height: 3px; background: var(--accent);">
+
+        <p class="lead" style="font-size: 22px; line-height: 1.45; color: var(--ink); margin: 0;">
+          纯 Mac 本地轻量驻留。零云端租赁费、零公网内网穿透费、零模型门槛。
+        </p>
+
+        <!-- 3 大“零元”优势矩阵 -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 4px;">
+          <div style="background: var(--grey-1); padding: 20px; border-left: 3px solid var(--accent);">
+            <div style="font-family: var(--mono); font-size: 32px; font-weight: 300; color: var(--accent);">0 元</div>
+            <div style="font-size: 18px; font-weight: 600; margin: 4px 0 6px;">模型调用费</div>
+            <div style="font-size: 13px; color: var(--grey-3); line-height: 1.4;">
+              Qwen2.5-7B 官方永久免费，毫秒级快速响应。
+            </div>
+          </div>
+          <div style="background: var(--grey-1); padding: 20px; border-left: 3px solid var(--ink);">
+            <div style="font-family: var(--mono); font-size: 32px; font-weight: 300; color: var(--ink);">0 元</div>
+            <div style="font-size: 18px; font-weight: 600; margin: 4px 0 6px;">云服务器租金</div>
+            <div style="font-size: 13px; color: var(--grey-3); line-height: 1.4;">
+              利用随身 Mac 电脑后台守护，无需购买任何 VPS。
+            </div>
+          </div>
+          <div style="background: var(--grey-1); padding: 20px; border-left: 3px solid var(--accent);">
+            <div style="font-family: var(--mono); font-size: 32px; font-weight: 300; color: var(--accent);">0 元</div>
+            <div style="font-size: 18px; font-weight: 600; margin: 4px 0 6px;">内网穿透费</div>
+            <div style="font-size: 13px; color: var(--grey-3); line-height: 1.4;">
+              飞书 WebSocket 原生穿透内网，免买公网 IP 与域名。
+            </div>
+          </div>
+        </div>
+
+        <!-- 常用运维指令清单 (CLI Toolkit) -->
+        <div style="background: var(--paper); border: 1px solid var(--grey-2); padding: 20px 24px;">
+          <div style="font-family: var(--mono); font-size: 13px; color: var(--grey-3); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.1em;">
+            CLI TOOLKIT · 本地控制台常用指令
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-family: var(--mono); font-size: 14px;">
+            <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: var(--grey-1);">
+              <span style="color: var(--ink); font-weight: 600;">./status.sh</span>
+              <span style="color: var(--grey-3);">查看后台进程 PID、长连接状态与最近捕获日志</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: var(--grey-1);">
+              <span style="color: var(--ink); font-weight: 600;">./start.sh</span>
+              <span style="color: var(--grey-3);">一键后台守护启动 (nohup + 自动防重复)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: var(--grey-1);">
+              <span style="color: var(--ink); font-weight: 600;">./stop.sh</span>
+              <span style="color: var(--grey-3);">平滑优雅终止后台常驻服务</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: var(--grey-1);">
+              <span style="color: var(--accent); font-weight: 600;">python3 test_env.py</span>
+              <span style="color: var(--grey-3);">飞书 / 思源 / 大模型 / 微软日历 4 合 1 连通自检</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 总结金句 -->
+        <div style="padding: 16px 20px; background: var(--grey-1); border-left: 3px solid var(--accent); font-size: 15px; color: var(--ink); line-height: 1.5;">
+          <strong>主权归属</strong>：彻底摆脱第三方云笔记绑架与封号焦虑。你记录的每一个灵感与记忆，100% 沉淀在完全属于你的本地硬盘中。
+        </div>
+      </div>
+
+      <!-- 底部 Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--grey-2); padding-top: 20px; font-family: var(--mono); font-size: 14px; color: var(--grey-3); letter-spacing: 0.1em; text-transform: uppercase;">
+        <span>PAGE 05 OF 05 · OPERATIONS</span>
+        <span>FEISHU COPILOT · DESIGNED & DEPLOYED IN 2026</span>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Lucide icon initialization (used by stacked ledger / matrix accents) -->
+  <script>
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
+  </script>
+</body>
+</html>
