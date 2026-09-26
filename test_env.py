@@ -10,6 +10,25 @@ import requests
 import lark_oapi as lark
 from lark_oapi.api.auth.v3 import InternalTenantAccessTokenRequest, InternalTenantAccessTokenRequestBody
 
+try:
+    import keyring
+except ImportError:
+    keyring = None
+
+def _resolve_secret(service: str, account: str, env_var: str = None, default: str = "") -> str:
+    if keyring:
+        try:
+            val = keyring.get_password(service, account)
+            if val:
+                return val.strip()
+        except Exception:
+            pass
+    if env_var:
+        env_val = os.getenv(env_var)
+        if env_val:
+            return env_val.strip()
+    return default
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 
@@ -26,8 +45,8 @@ def run_checks():
         conf = json.load(f)
 
     # 1. 飞书凭据验证
-    app_id = conf["feishu"].get("app_id", "")
-    app_secret = conf["feishu"].get("app_secret", "")
+    app_id = conf["feishu"].get("app_id", "") or _resolve_secret("feishu_copilot", "app_id", "FEISHU_APP_ID")
+    app_secret = conf["feishu"].get("app_secret", "") or _resolve_secret("feishu_copilot", "app_secret", "FEISHU_APP_SECRET")
     print(f"\n1. 检查飞书应用凭证 (App ID: {app_id})...")
     client = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
     req = InternalTenantAccessTokenRequest.builder().request_body(
@@ -41,7 +60,8 @@ def run_checks():
 
     # 2. 检查大模型配置
     llm_conf = conf.get("llm", {})
-    api_key = llm_conf.get("api_key", "").strip()
+    provider = llm_conf.get("provider", "siliconflow")
+    api_key = llm_conf.get("api_key", "").strip() or _resolve_secret(provider, "api_key", f"{provider.upper()}_API_KEY")
     base_url = llm_conf.get("base_url", "")
     model = llm_conf.get("model", "")
     print(f"\n2. 检查大模型配置...")
@@ -71,7 +91,7 @@ def run_checks():
     sy_conf = conf.get("siyuan", {})
     sy_enabled = sy_conf.get("enabled", False)
     sy_url = sy_conf.get("api_url", "http://127.0.0.1:6806").rstrip("/")
-    sy_token = sy_conf.get("token", "")
+    sy_token = sy_conf.get("token", "") or _resolve_secret("siyuan", "api_token", "SIYUAN_TOKEN")
     print(f"\n3. 检查思源笔记本地联动...")
     if not sy_enabled:
         print("   ℹ️ 思源笔记联动未启用")

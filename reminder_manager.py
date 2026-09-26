@@ -29,6 +29,24 @@ logger = logging.getLogger("FeishuCopilot.Reminder")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REMINDERS_FILE = os.path.join(BASE_DIR, "reminders.json")
 
+def clean_task_name(task: str) -> str:
+    """清洗事项文本中的提醒/待办关键词前缀与后缀，保留纯净的任务正文"""
+    if not task:
+        return ""
+    # 剥离句首指令词 (如 "待办：", "【闹钟】", "提醒我 ")
+    clean = re.sub(
+        r'^(?:[【\[\(（]?(?:闹钟|待办|待办事项|提醒|提醒我|定闹钟|设闹钟|定个闹钟|设个闹钟|设个提醒|帮我提醒|记一下|备忘|TODO|todo)[】\]\)）]?[:：\s\-\/]*)+',
+        '', task, flags=re.IGNORECASE
+    )
+    # 剥离句尾指令词 (如 "... 待办", "... 提醒", "... 叫我")
+    clean = re.sub(
+        r'[-——\s\(\[（【]*(?:闹钟|待办|提醒|提醒我|叫我|记一下|备忘|定闹钟|设闹钟)[】）\]\)]*$',
+        '', clean
+    )
+    clean = re.sub(r'^(?:帮我|请|设置|安排|一个|记得|要|发我|对我说)\s*', '', clean)
+    clean = re.sub(r'^[，,、:：\s]+|[，,、:：\s]+$', '', clean).strip()
+    return clean or task
+
 class ReminderScheduler:
     def __init__(self, lark_client: lark.Client, siyuan_client=None, llm_caller=None):
         self.client = lark_client
@@ -58,15 +76,51 @@ class ReminderScheduler:
         except Exception as e:
             logger.error(f"保存 reminders.json 失败: {e}")
 
-    @staticmethod
-    def has_reminder_signal(text: str) -> bool:
-        """快速判断文本是否包含时间或提醒相关信号，避免无谓的大模型调用与误判"""
-        remind_verbs = r'(提醒|闹钟|叫我|通知|安排|待办|备忘|设个|定个|发.*给我|发我|对我说)'
-        time_words = r'(\d+|一|两|三|四|五|六|七|八|九|十|半)\s*(?:点|分|小时|分钟|刻|个钟头)'
-        date_words = r'(明天|后天|大后天|今晚|明早|明晚|周[一二三四五六日天]|星期[一二三四五六日天])'
-        corr_words = r'(设置错误|错了|改到|应该是|改下|修改)'
-        pattern = f'({remind_verbs}|{time_words}|{date_words}|{corr_words})'
-        return bool(re.search(pattern, text))
+    @classmethod
+    def has_reminder_signal(cls, text: str) -> bool:
+        """
+        判断用户是否明确具有设定闹钟/待办的意图 (严格遵循前后关键词与显式祈使使役动词逻辑)
+        - 1. 负向过滤：纯粹的过去耗时叙述与身体状态陈述（如'睡了一个小时'、'看了2小时'、'花了半小时'）绝对拦截。
+        - 2. 纠错规则：包含修改/设置错误且有上下文。
+        - 3. 句首关键词：以 闹钟/待办/提醒/提醒我/定个闹钟/设个闹钟/记一下/备忘/TODO 开头。
+        - 4. 句尾关键词：以 闹钟/待办/提醒/叫我/记一下/备忘 结尾。
+        - 5. 显式祈使使役动词短语：包含 提醒我/叫我/通知我/定个闹钟/设个闹钟/设个提醒。
+        """
+        text_clean = text.strip()
+        if not text_clean:
+            return False
+
+        # 1. 负向过滤：典型的过去时耗时叙述与日常状态陈述（如：睡了/看了/花了/用了/等了/跑了 X小时/分钟）
+        past_duration = re.search(r'(?:睡了|看了|花了|用了|等了|玩了|做了|走了|跑了|学了|搞了|忙了|歇了|躺了)\s*(?:[一二两三四五六七八九十\d]+|半)\s*(?:个)?\s*(?:小时|分钟|分|秒|钟头)', text_clean)
+        if past_duration and not re.search(r'(?:提醒我|叫我|通知我)', text_clean):
+            prefix_match = re.search(r'^(?:[【\[\(（]?(?:闹钟|待办|提醒)[】\]\)）]?[:：\s])', text_clean)
+            suffix_match = re.search(r'(?:闹钟|待办|提醒)[】）\]\)]*$', text_clean)
+            if not prefix_match and not suffix_match:
+                return False
+
+        # 2. 纠错指令信号（如："时间弄错了，改成下午3点"）
+        corr_pattern = r'(设置错误|闹钟错误|时间错了|弄错了|改到|应该是|改下时间|修改闹钟|修改提醒)'
+        if re.search(corr_pattern, text_clean):
+            return True
+
+        # 3. 句首关键词 (Prefix)
+        prefix_pattern = r'^(?:[【\[\(（](?:闹钟|待办|待办事项|提醒|提醒我|定闹钟|设闹钟|定个闹钟|设个闹钟|设个提醒|帮我提醒|记一下|备忘|TODO|todo)[】\]\)）]\s*|(?:闹钟|待办|待办事项|提醒|提醒我|定闹钟|设闹钟|定个闹钟|设个闹钟|设个提醒|帮我提醒|记一下|备忘|TODO|todo)[:：\s\-\/]+\s*)'
+        if re.search(prefix_pattern, text_clean, re.IGNORECASE):
+            return True
+        if re.match(r'^(?:闹钟|待办|备忘|TODO|todo)\s+', text_clean, re.IGNORECASE):
+            return True
+
+        # 4. 句尾关键词 (Suffix)
+        suffix_pattern = r'[-——\s\(\[（【]+(?:闹钟|待办|提醒|提醒我|叫我|记一下|备忘|定闹钟|设闹钟)[】）\]\)]*$'
+        if re.search(suffix_pattern, text_clean):
+            return True
+
+        # 5. 句中明确的祈使/使役命令短语（用户直接向助手发出"提醒我/叫我"指令）
+        imperative_pattern = r'(?:提醒我|叫我|通知我|记得提醒我|帮我定个闹钟|帮我设个闹钟|定个闹钟|设个闹钟|设个提醒|记得通知我)'
+        if re.search(imperative_pattern, text_clean):
+            return True
+
+        return False
 
     def parse_intent(self, text: str, now: datetime = None):
         """解析文本是否包含提醒意图与具体时间 (支持上下文纠错与地点/事件高精度抽取)"""
@@ -75,7 +129,7 @@ class ReminderScheduler:
 
         text_clean = text.strip()
 
-        # 0. 快速初筛门禁：如果连时间词、提醒词、纠错词都没有，绝不是闹钟，直接放行 (提速且防误判)
+        # 0. 快速初筛门禁：如果连前后关键词、使役动词、纠错词都没有，绝不是闹钟，直接放行 (提速且防误判)
         if not self.has_reminder_signal(text_clean):
             return None, None, False
 
@@ -91,13 +145,13 @@ class ReminderScheduler:
         if self.llm_caller:
             dt_llm, task_llm, is_correction = self._parse_with_llm(text_clean, now, recent_context)
             if dt_llm and task_llm:
-                return dt_llm, task_llm, is_correction
+                return dt_llm, clean_task_name(task_llm), is_correction
 
         # 2. 本地高精度规则兜底 (0 Token 离线算法)
         dt_reg, task_reg = self._parse_regex_enhanced(text_clean, now)
         if dt_reg and task_reg:
             is_corr = any(k in text_clean for k in ["设置错误", "错了", "改到", "应该是", "改下", "修改"])
-            return dt_reg, task_reg, is_corr
+            return dt_reg, clean_task_name(task_reg), is_corr
 
         return None, None, False
 
@@ -120,7 +174,7 @@ class ReminderScheduler:
 
     def _parse_regex_enhanced(self, text: str, now: datetime):
         """本地高精度时间与事项正则解析 (增强版，支持倒装句、地点与事件提取)"""
-        if not re.search(r"(提醒|叫我|闹钟|待办|通知|后|点|分|发.*给|发.*我|半小时)", text):
+        if not self.has_reminder_signal(text):
             return None, None
 
         # A. 半小时/半个钟头单独处理
@@ -128,7 +182,7 @@ class ReminderScheduler:
         if m_half:
             task = m_half.group(1).strip()
             task = re.sub(r"^(?:说|道|：|:)\s*", "", task)
-            task = task or "半小时预定事项"
+            task = clean_task_name(task) or "半小时预定事项"
             return now + timedelta(minutes=30), task
 
         # B. 相对时间: (一|两|三|10) 分钟/小时之后
@@ -176,12 +230,12 @@ class ReminderScheduler:
                 target_dt += timedelta(days=1)
 
             # 清洗提取具体事项和地点
-            clean = re.sub(r"(帮我|请|设置|安排|一个|的闹钟|闹钟|提醒我|叫我|通知我|记得|要|发我|对我说)", "", text)
+            clean = re.sub(r"(帮我|请|设置|安排|一个|的闹钟|闹钟|待办事项|待办|备忘|记一下|todo|TODO|提醒我|叫我|通知我|记得|要|发我|对我说)", "", text)
             clean = re.sub(r"(今天|明天|后天|早上|上午|中午|下午|晚上|今晚|明晚|傍晚)", "", clean)
             clean = re.sub(r"([一二两三四五六七八九十\d]{1,2})\s*[点:：]\s*(半|[一二两三四五六七八九十\d]{1,2})?(?:分)?", "", clean)
             clean = re.sub(r"^[，,、\s]+|[，,、\s]+$", "", clean)
             clean = re.sub(r"[，,、]+", " ", clean).strip()
-            task = clean or "预定日程"
+            task = clean_task_name(clean) or "预定日程"
             return target_dt, task
 
         return None, None
@@ -195,17 +249,18 @@ class ReminderScheduler:
 {context_part}用户最新发来一条消息："{text}"
 
 请严格按照以下规则分析：
-1. 意图判断（极其严谨）：
+1. 意图判断（极其严谨，必须遵循前后关键词与强动词逻辑）：
    - 用户是否在【明确要求定未来的闹钟、设置定时提醒、或者修改日程】？
+   - 必须具有明确的指令标记：句首/句尾含有【闹钟、待办、提醒、记一下、备忘】或句中含有【提醒我、叫我、通知我】等明确的使役指令！
+   - 如果用户只是在描述自己做过的事、耗时叙述（例如："睡了一个小时"、"写了两个小时代码"、"看了半小时书"）、当前的身体或心理状态（"好一点了"、"没那么晕了"、"晚上睡不好"），绝不是闹钟！必须输出 {{"is_reminder": false}}。
    - 严禁脑补与凭空捏造时间！必须是用户在文本中明确指定了未来的触发时间点（如"明早8点"、"半小时后"、"周日处理"）。
-   - 如果用户只是在描述自己当前的身体状态、正在进行的即时动作（例如："睡不着起来做八部金刚功"、"出门跑步"、"现在去洗澡"），或者只是表达日后打算但未明确要求定闹钟的，绝不是闹钟！必须输出 {{"is_reminder": false}}。
    - "八部金刚功"、"八段锦"等专有名词中的数字绝对不是时间！
 2. 时间计算（关键）：
    - 必须换算为 24 小时制（例如："晚上6点" -> 18:00:00，绝不可算为 06:00:00；"下午3点" -> 15:00:00；"中午12点" -> 12:00:00）。
    - "明天"、"后天"必须以当前系统时间为准准确推算公历日期。
-3. 事项提取（核心）：
-   - 提取出的 task 必须完整包含用户提到的【具体事件、地点、人物】（例如"帮我设置一个明天晚上吃饭的闹钟，在利和广场，6点" -> 事项提取为"在利和广场吃饭"）。
-   - 严禁丢弃地点和事件！禁止输出"预定日程"、"待办事项"等无意义泛化词汇。
+3. 事项提取与关键词剥离（核心）：
+   - 提取出的 task 必须完整包含用户提到的【具体事件、地点、人物】（例如"待办：明天晚上吃饭，在利和广场，6点" -> 事项提取为"在利和广场吃饭"）。
+   - 必须剥离掉"待办："、"闹钟："、"提醒我"、"记一下"等指令标记词，只保留纯净的具体事项！
    - 如果用户是在纠正上一条日程（如"上面这个日程设置错误，应该是明天晚上6点"），请继承并保持上一条上下文的具体事项（如"在利和广场吃饭"），并将时间纠正为新时间，设置 is_correction 为 true。
 
 请输出纯 JSON 格式：
@@ -222,7 +277,7 @@ class ReminderScheduler:
                 if data.get("is_reminder") and data.get("remind_at") and data.get("task"):
                     target_dt = datetime.strptime(data["remind_at"], "%Y-%m-%d %H:%M:%S")
                     is_correction = bool(data.get("is_correction", False))
-                    task_str = data["task"].strip()
+                    task_str = clean_task_name(data["task"].strip())
                     logger.info(f"🧠 大模型提取日程成功: [{data['remind_at']}] {task_str} (纠错={is_correction})")
                     return target_dt, task_str, is_correction
         except Exception as e:

@@ -36,6 +36,31 @@ from lark_oapi.api.im.v1 import (
 
 
 
+try:
+    import keyring
+except ImportError:
+    keyring = None
+
+def _resolve_secret(service: str, account: str, env_var: str = None, default: str = "") -> str:
+    """
+    凭据级联安全解析：
+    1. 优先从 macOS Keychain 钥匙串读取
+    2. 回退从系统集中环境变量读取 (~/.config/secrets/tokens.env)
+    3. 若均未找到则返回 default
+    """
+    if keyring:
+        try:
+            val = keyring.get_password(service, account)
+            if val:
+                return val.strip()
+        except Exception:
+            pass
+    if env_var:
+        env_val = os.getenv(env_var)
+        if env_val:
+            return env_val.strip()
+    return default
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 
@@ -43,7 +68,41 @@ def load_config():
     if not os.path.exists(CONFIG_PATH):
         raise FileNotFoundError(f"配置文件不存在: {CONFIG_PATH}")
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        cfg = json.load(f)
+
+    # 动态安全注入 Keychain / 环境变量凭据
+    if "feishu" in cfg:
+        cfg["feishu"]["app_id"] = _resolve_secret("feishu_copilot", "app_id", "FEISHU_APP_ID", cfg["feishu"].get("app_id", ""))
+        cfg["feishu"]["app_secret"] = _resolve_secret("feishu_copilot", "app_secret", "FEISHU_APP_SECRET", cfg["feishu"].get("app_secret", ""))
+
+    if "siyuan" in cfg:
+        cfg["siyuan"]["token"] = _resolve_secret("siyuan", "api_token", "SIYUAN_TOKEN", cfg["siyuan"].get("token", ""))
+
+    sf_key = _resolve_secret("siliconflow", "api_key", "SILICONFLOW_API_KEY")
+    ds_key = _resolve_secret("deepseek", "api_key", "DEEPSEEK_API_KEY")
+    zp_key = _resolve_secret("zhipu", "api_key", "ZHIPU_API_KEY")
+
+    def _fill_provider_key(p_dict):
+        prov = p_dict.get("provider", "").lower()
+        if not p_dict.get("api_key"):
+            if "siliconflow" in prov and sf_key:
+                p_dict["api_key"] = sf_key
+            elif "deepseek" in prov and ds_key:
+                p_dict["api_key"] = ds_key
+            elif "zhipu" in prov and zp_key:
+                p_dict["api_key"] = zp_key
+
+    if "llm" in cfg:
+        _fill_provider_key(cfg["llm"])
+
+    if "vlm" in cfg and not cfg["vlm"].get("api_key") and zp_key:
+        cfg["vlm"]["api_key"] = zp_key
+
+    if "model_providers" in cfg:
+        for p_name, p_data in cfg["model_providers"].items():
+            _fill_provider_key(p_data)
+
+    return cfg
 
 CONFIG = load_config()
 
@@ -411,9 +470,11 @@ def analyze_image_with_vlm(img_bytes: bytes) -> str:
         return ""
 
 # ================= 飞书 Client 与闹钟日程调度引擎 =================
+_feishu_app_id = _resolve_secret("feishu", "app_id", "FEISHU_APP_ID", CONFIG.get("feishu", {}).get("app_id", ""))
+_feishu_app_secret = _resolve_secret("feishu", "app_secret", "FEISHU_APP_SECRET", CONFIG.get("feishu", {}).get("app_secret", ""))
 client = lark.Client.builder() \
-    .app_id(CONFIG["feishu"]["app_id"]) \
-    .app_secret(CONFIG["feishu"]["app_secret"]) \
+    .app_id(_feishu_app_id) \
+    .app_secret(_feishu_app_secret) \
     .build()
 
 from reminder_manager import ReminderScheduler
@@ -825,7 +886,7 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
             matched_key = target
 
         if matched_key and matched_key in providers:
-            chosen = providers[matched_key]
+            # 内存中更新活跃配置
             CONFIG["llm"] = {
                 "provider": chosen.get("provider", "custom"),
                 "api_key": chosen.get("api_key", ""),
@@ -833,6 +894,17 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
                 "model": chosen.get("model", ""),
                 "notes": f"由指令动态切换至 {chosen.get('name', matched_key)}"
             }
+            # 磁盘持久化时执行严格脱敏：清除明文 Key，依靠 Keychain / 环境变量动态提供
+            import copy
+            sanitized_cfg = copy.deepcopy(CONFIG)
+            if "feishu" in sanitized_cfg: sanitized_cfg["feishu"]["app_secret"] = ""
+            if "siyuan" in sanitized_cfg: sanitized_cfg["siyuan"]["token"] = ""
+            if "llm" in sanitized_cfg: sanitized_cfg["llm"]["api_key"] = ""
+            if "vlm" in sanitized_cfg: sanitized_cfg["vlm"]["api_key"] = ""
+            if "model_providers" in sanitized_cfg:
+                for p in sanitized_cfg["model_providers"].values():
+                    p["api_key"] = ""
+
             for cfg_path in [
                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"),
                 os.path.expanduser("~/.feishu_copilot_app/config.json")
@@ -840,7 +912,7 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
                 try:
                     if os.path.exists(cfg_path):
                         with open(cfg_path, "w", encoding="utf-8") as f:
-                            json.dump(CONFIG, f, ensure_ascii=False, indent=2)
+                            json.dump(sanitized_cfg, f, ensure_ascii=False, indent=2)
                 except Exception as e:
                     logger.error(f"持久化保存配置到 {cfg_path} 失败: {e}")
 

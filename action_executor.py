@@ -16,6 +16,7 @@ import time
 import logging
 from datetime import datetime
 import requests
+from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger("FeishuCopilot.ActionGateway")
 
