@@ -519,6 +519,297 @@ def create_feishu_task(summary: str, due_dt: datetime = None, open_id: str = "",
         logger.error(f"创建飞书待办异常: {e}")
     return {}
 
+def complete_feishu_task(guid: str) -> bool:
+    """在飞书 Task v2 中标记任务已完成"""
+    if not guid:
+        return False
+    try:
+        from lark_oapi.api.task.v2 import PatchTaskRequest, PatchTaskRequestBody, InputTask
+        now_ms = str(int(time.time() * 1000))
+        input_task = InputTask.builder().completed_at(now_ms).build()
+        req_body = PatchTaskRequestBody.builder().task(input_task).update_fields(["completed_at"]).build()
+        req = PatchTaskRequest.builder().task_guid(guid).request_body(req_body).build()
+        resp = client.task.v2.task.patch(req)
+        if resp.success() or (resp.code == 1470400 and "completed" in str(resp.msg).lower()):
+            logger.info(f"✅ 飞书待办任务已完成/处于完成状态: {guid}")
+            _update_local_task_status(guid, "completed")
+            return True
+        else:
+            logger.warning(f"完成飞书待办返回错误: {resp.code} - {resp.msg}")
+    except Exception as e:
+        logger.error(f"完成飞书待办异常: {e}")
+    return False
+
+def delete_feishu_task(guid: str) -> bool:
+    """在飞书 Task v2 中物理删除任务"""
+    if not guid:
+        return False
+    try:
+        from lark_oapi.api.task.v2 import DeleteTaskRequest
+        req = DeleteTaskRequest.builder().task_guid(guid).build()
+        resp = client.task.v2.task.delete(req)
+        if resp.success():
+            logger.info(f"✅ 成功从飞书物理删除待办: {guid}")
+            _update_local_task_status(guid, "deleted")
+            return True
+        else:
+            logger.warning(f"删除飞书待办返回错误: {resp.code} - {resp.msg}")
+    except Exception as e:
+        logger.error(f"删除飞书待办异常: {e}")
+    return False
+
+def update_feishu_task_due(guid: str, due_dt: datetime) -> bool:
+    """在飞书 Task v2 中更新任务截止时间"""
+    if not guid or not due_dt:
+        return False
+    try:
+        from lark_oapi.api.task.v2 import PatchTaskRequest, PatchTaskRequestBody, InputTask, Due
+        due_ms = int(due_dt.timestamp() * 1000)
+        due_obj = Due.builder().timestamp(str(due_ms)).is_all_day(False).build()
+        input_task = InputTask.builder().due(due_obj).build()
+        req_body = PatchTaskRequestBody.builder().task(input_task).update_fields(["due"]).build()
+        req = PatchTaskRequest.builder().task_guid(guid).request_body(req_body).build()
+        resp = client.task.v2.task.patch(req)
+        if resp.success():
+            logger.info(f"✅ 成功更新飞书待办截止时间: {guid} -> {due_dt}")
+            return True
+        else:
+            logger.warning(f"更新飞书待办截止时间返回错误: {resp.code} - {resp.msg}")
+    except Exception as e:
+        logger.error(f"更新飞书待办截止时间异常: {e}")
+    return False
+
+def _update_local_task_status(guid: str, status: str):
+    """更新本地 feishu_tasks.json 中的任务状态"""
+    try:
+        fpath = os.path.join(BASE_DIR, "feishu_tasks.json")
+        if os.path.exists(fpath):
+            with open(fpath, "r", encoding="utf-8") as f:
+                tasks = json.load(f)
+            for t in tasks:
+                if t.get("guid") == guid:
+                    t["status"] = status
+                    t["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(fpath, "w", encoding="utf-8") as f:
+                json.dump(tasks, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"更新本地任务状态异常: {e}")
+
+def find_task_guid_by_summary(task_summary: str) -> str:
+    """根据任务标题在 feishu_tasks.json 中查找最近对应的任务 GUID"""
+    try:
+        fpath = os.path.join(BASE_DIR, "feishu_tasks.json")
+        if os.path.exists(fpath):
+            with open(fpath, "r", encoding="utf-8") as f:
+                tasks = json.load(f)
+            for t in reversed(tasks):
+                if t.get("summary") == task_summary:
+                    return t.get("guid", "")
+    except Exception as e:
+        logger.warning(f"查找本地任务 GUID 异常: {e}")
+    return ""
+
+def handle_reminder_feedback_intent(text_clean: str, chat_id: str, open_id: str):
+    """
+    上下文感知：闭环/延期/取消闹钟提醒
+    处理用户在收到到期提醒（或设定提醒后）发送的反馈：「确认」、「完成」、「延期 10分钟」、「取消」等
+    0 Token 本地即时响应，自动同步飞书待办中心与思源笔记
+    """
+    text_lower = text_clean.lower().strip()
+
+    # 动作 A: 确认完成 (闭环)
+    complete_words = {
+        "确认", "已确认", "确认完成", "收到", "收到啦", "已收到",
+        "完成", "已完成", "搞定", "已搞定", "办了", "已办",
+        "done", "ok", "知道了", "明白", "弄好了", "处理了"
+    }
+    is_complete = text_lower in complete_words or bool(re.match(r"^(?:确认|已确认|已完成|已搞定|搞定|完成|收到)(?:了|啦)?$", text_clean))
+
+    # 动作 B: 延期推迟 (Snooze)
+    m_snooze = re.match(r"^(?:延期|推迟|延后|稍后|待会|等会儿)(?:提醒)?(?:\s*(\d+|半|[一二两三四五六七八九十]+)\s*(?:个)?(分钟|小时|分|h|min|m)?)?$", text_clean, re.IGNORECASE)
+    m_snooze2 = re.match(r"^(?:再过|等)\s*(\d+|半|[一二两三四五六七八九十]+)\s*(?:个)?(分钟|小时|分|h|min|m)?(?:后再提醒我?|提醒我?)$", text_clean)
+
+    # 动作 C: 取消作废 (Cancel)
+    cancel_words = {"取消", "不用了", "不用提醒", "不用提醒了", "取消该提醒", "取消闹钟", "取消待办", "算了", "作废"}
+    is_cancel = text_lower in cancel_words
+
+    # 如果有待确认的 triggered 闹钟（24小时内），用户回复「好」或「好的」也视为确认闭环
+    # 但如果只有 pending 闹钟，回复「好」不触发，避免误触
+    is_gentle_affirm = text_clean in ["好", "好的"]
+
+    if not (is_complete or m_snooze or m_snooze2 or is_cancel or is_gentle_affirm):
+        return None
+
+    # 检索最近一条可操作的提醒
+    target_rem, rem_type = reminder_scheduler.get_latest_actionable_reminder(chat_id)
+    if not target_rem:
+        # 没有可操作提醒时：如果是显式延期或取消指令，提示用户；如果是普通词「好/收到/确认」，返回 None 让其正常流转
+        if m_snooze or m_snooze2:
+            return "⏰ 当前没有任何待触发或刚刚提醒的闹钟，无需延期。"
+        if is_cancel and text_clean in ["取消该提醒", "取消闹钟"]:
+            return "⏰ 当前没有任何活跃闹钟。"
+        return None
+
+    # 如果命中「好/好的」，但最近的提醒并不是 triggered（已响铃），则不拦截
+    if is_gentle_affirm and rem_type != "triggered":
+        return None
+
+    task_name = target_rem.get("task", "未知事项")
+    rem_id = target_rem.get("id")
+    guid = target_rem.get("feishu_task_guid") or find_task_guid_by_summary(task_name)
+
+    # 执行具体动作
+    if is_complete or is_gentle_affirm:
+        reminder_scheduler.complete_reminder(rem_id)
+        if guid:
+            complete_feishu_task(guid)
+        if siyuan and siyuan.is_active():
+            siyuan.append_memo(f"✅ 事项已完成闭环：{task_name}", summary_tag="#已完成")
+        logger.info(f"🎯 提醒闭环成功: {task_name} (ID: {rem_id})")
+        return (
+            f"✅ 备忘已闭环\n"
+            f"事项：{task_name}\n"
+            f"状态：已标记完成\n"
+            f"思源与待办已同步"
+        )
+
+    elif m_snooze or m_snooze2:
+        m = m_snooze or m_snooze2
+        num_str = m.group(1)
+        unit = m.group(2) if len(m.groups()) > 1 else ""
+
+        delay_minutes = 10  # 默认推迟 10 分钟
+        if num_str:
+            CN_NUM = {"一":1, "二":2, "两":2, "三":3, "四":4, "五":5, "六":6, "七":7, "八":8, "九":9, "十":10}
+            if num_str == "半":
+                delay_minutes = 30
+            elif num_str.isdigit():
+                val = int(num_str)
+                delay_minutes = val * 60 if unit in ["小时", "h"] else val
+            elif num_str in CN_NUM:
+                val = CN_NUM[num_str]
+                delay_minutes = val * 60 if unit in ["小时", "h"] else val
+
+        delay_minutes = max(1, delay_minutes)
+        res = reminder_scheduler.snooze_reminder(rem_id, delay_minutes)
+        if res:
+            item, new_dt = res
+            new_time_str = new_dt.strftime("%H:%M") if new_dt.date() == datetime.now().date() else new_dt.strftime("%Y-%m-%d %H:%M")
+            if guid:
+                update_feishu_task_due(guid, new_dt)
+            if siyuan and siyuan.is_active():
+                siyuan.append_memo(f"⏰ 事项已延期 {delay_minutes} 分钟至 [{new_time_str}]：{task_name}", summary_tag="#待办闹钟")
+            logger.info(f"🎯 提醒延期成功: {task_name} -> {new_time_str}")
+            return (
+                f"⏰ 提醒已推迟\n"
+                f"事项：{task_name}\n"
+                f"新时间：{new_time_str} (约 {delay_minutes} 分钟后)\n"
+                f"思源与待办已同步"
+            )
+
+    elif is_cancel:
+        reminder_scheduler.cancel_reminder_by_id(rem_id)
+        if guid:
+            delete_feishu_task(guid)
+        if siyuan and siyuan.is_active():
+            siyuan.append_memo(f"🗑️ 取消提醒：{task_name}", summary_tag="#注销闹钟")
+        logger.info(f"🎯 提醒取消成功: {task_name} (ID: {rem_id})")
+        return (
+            f"🗑️ 提醒已取消\n"
+            f"事项：{task_name}\n"
+            f"思源与待办已同步"
+        )
+
+    return None
+
+def detect_sleep_rhythm_log(text_clean: str, now: datetime):
+    """
+    生理节律与作息打卡智能拦截器 (0-Token 本地秒级响应)
+    精准识别深夜至清晨（及日常）的「醒」、「起夜」、「睡了」、「午休」等生理状态记录
+    自动归入 #作息 #睡眠 体系，杜绝大模型无关的玄学说教（如冥想建议）
+    """
+    clean = text_clean.strip()
+    if len(clean) > 15:
+        return None
+
+    # 排除显式的指令、待办或提醒
+    if any(clean.startswith(prefix) for prefix in ["待办", "TODO", "todo", "- [ ]", "提醒", "取消", "查看", "切换", "我的"]):
+        return None
+
+    hour = now.hour
+    now_hm = now.strftime("%H:%M")
+
+    # 1. 晨起 / 唤醒模式
+    m_wake = re.match(r"^(?:刚?醒(?:了|来)?|早醒|早起|起(?:了|床(?:了)?)?)$", clean)
+
+    # 2. 夜醒 / 起夜 / 睡眠障碍模式
+    m_night_wake = re.match(r"^(?:起夜|夜醒|半夜醒|睡不着|失眠|翻来覆去|恶梦醒了|做噩梦醒了)$", clean)
+
+    # 3. 就寝 / 入睡模式
+    m_sleep = re.match(r"^(?:睡(?:了|觉(?:了)?)?|去睡(?:了|觉)?|准备睡(?:了|觉)?|入睡|晚安|熄灯)$", clean)
+
+    # 4. 午间作息模式
+    m_nap = re.match(r"^(?:午休(?:了)?|午睡(?:了)?|小憩|眯(?:了)?会儿|眯一会|睡个午觉)$", clean)
+    m_nap_wake = re.match(r"^(?:午睡醒(?:了)?|午休醒(?:了)?|午觉醒了)$", clean)
+
+    matched_type = None
+    subtag = ""
+    title = ""
+    status_desc = ""
+
+    if m_night_wake:
+        matched_type = "night_wake"
+        subtag = "作息/夜醒"
+        title = "🌙 夜间作息"
+        status_desc = "已记录夜醒状态"
+    elif m_wake:
+        if 0 <= hour < 5:
+            matched_type = "night_wake"
+            subtag = "作息/夜醒"
+            title = "🌙 夜间作息"
+            status_desc = "已记录夜醒状态"
+        elif 5 <= hour < 12:
+            matched_type = "morning_wake"
+            subtag = "作息/晨起"
+            title = "🌅 晨起作息"
+            status_desc = "已记录清醒打卡"
+        else:
+            matched_type = "wake"
+            subtag = "作息/清醒"
+            title = "☀️ 作息打卡"
+            status_desc = "已记录清醒状态"
+    elif m_sleep:
+        matched_type = "sleep"
+        subtag = "作息/就寝"
+        title = "🌙 就寝作息"
+        status_desc = "已记录就寝打卡"
+    elif m_nap:
+        matched_type = "nap"
+        subtag = "作息/午休"
+        title = "☀️ 午间作息"
+        status_desc = "已记录午休小憩"
+    elif m_nap_wake:
+        matched_type = "nap_wake"
+        subtag = "作息/午休唤醒"
+        title = "☀️ 午间作息"
+        status_desc = "已记录午休唤醒"
+
+    if not matched_type:
+        return None
+
+    if siyuan and siyuan.is_active():
+        memo_content = f"【{subtag}】{clean}"
+        siyuan.append_memo(memo_content, summary_tag=f"#{subtag} #睡眠")
+
+    logger.info(f"🛌 命中生理作息记录: [{subtag}] {clean} ({now_hm})")
+
+    return (
+        f"{title}\n"
+        f"时间：{now_hm}\n"
+        f"状态：{status_desc} (#{subtag})\n"
+        f"思源已同步"
+    )
+
 # ================= Agent 动作执行网关 (Action Tools Gateway) =================
 from action_executor import ActionGateway, record_created_task, cancel_last_created_task
 REMINDERS_FILE = os.path.join(BASE_DIR, "reminders.json")
@@ -760,7 +1051,7 @@ def analyze_single_memo(raw_text: str, user_tags: list = None) -> str:
 请严格按照以下格式输出（极简、高密度、严禁多余emoji和无用废话）：
 归纳：（1句话提炼本质，打上 1-3 个标签，包含用户指定标签及延伸标签）
 待办：（如含明确TODO列出「- [ ] 事项内容」，无则写「无」）
-洞见：（从认知视角、执行力或心智模式给出的精炼建议，60字内）
+洞见：（从认知视角、执行力或心智模式给出的精炼建议，60字内。注意：若为生理体感、日常作息或纯生活陈述，保持客观共情或简要提炼，严禁居高临下说教或强推打卡/冥想）
 """
     res = call_llm(prompt)
     if res:
@@ -833,6 +1124,18 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
         logger.info(f"🔄 处理用户确认反馈: {text_clean}")
         siyuan.append_memo(f"⚙️ 用户确认反馈：{text_clean}", summary_tag="#系统指令")
         return confirm_reply
+
+    # 0.2 检查是否是闹钟/待办的反馈闭环指令 (如用户回复「确认」、「完成」、「延期 10分钟」、「取消」)
+    feedback_reply = handle_reminder_feedback_intent(text_clean, chat_id, open_id)
+    if feedback_reply:
+        logger.info(f"⏰ 闹钟操作闭环: {text_clean}")
+        return feedback_reply
+
+    # 0.3 检查是否是作息/睡眠等生理节律打卡 (如「醒」、「起夜」、「睡了」、「午休」)
+    sleep_reply = detect_sleep_rhythm_log(text_clean, now)
+    if sleep_reply:
+        logger.info(f"🛌 生理节律打卡: {text_clean}")
+        return sleep_reply
 
     # 0.5 检查是否是系统级管理操作指令 (如 "帮我清除掉今天8点之后的所有点滴设置和日程设置，包括对应的文件")
     action_intent = action_gateway.detect_action_intent(text_clean, now, llm_caller=call_llm)
@@ -981,6 +1284,8 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
 
         # 同步在飞书创建官方原生待办任务
         task_info = create_feishu_task(remind_task, due_dt=remind_dt, open_id=open_id, description=f"⏰ 智能提醒: 设定于 {time_display} 触发")
+        if task_info.get("guid"):
+            reminder_scheduler.update_reminder_feishu_guid(item["id"], task_info["guid"])
         task_link_part = ""
         if task_info.get("url"):
             task_link_part = f"\n📋 飞书待办：[点击进入待办详情]({task_info['url']})"

@@ -330,9 +330,100 @@ class ReminderScheduler:
             if 0 <= index < len(active):
                 target = active[index]
                 target["status"] = "cancelled"
+                target["cancelled_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self._save_reminders()
                 return True
         return False
+
+    def get_latest_actionable_reminder(self, chat_id: str = ""):
+        """获取最近一条可操作的提醒（优先已触发未闭环的，其次临近的待触发）"""
+        with self.lock:
+            now = datetime.now()
+            # 1. 优先查找最近 24 小时内触发但尚未标记完成的提醒
+            triggered_candidates = [
+                r for r in self.reminders
+                if r.get("status") == "triggered"
+            ]
+            if chat_id:
+                chat_triggered = [r for r in triggered_candidates if r.get("chat_id") == chat_id]
+                if chat_triggered:
+                    triggered_candidates = chat_triggered
+
+            if triggered_candidates:
+                triggered_candidates.sort(key=lambda x: x.get("triggered_at", x.get("remind_at", "")), reverse=True)
+                latest = triggered_candidates[0]
+                t_str = latest.get("triggered_at", latest.get("remind_at", ""))
+                try:
+                    t_dt = datetime.strptime(t_str, "%Y-%m-%d %H:%M:%S")
+                    if (now - t_dt).total_seconds() <= 86400:
+                        return latest, "triggered"
+                except Exception:
+                    return latest, "triggered"
+
+            # 2. 查找待触发 pending 的提醒（按提醒时间正序，取最近要触发的）
+            pending_candidates = [
+                r for r in self.reminders
+                if r.get("status") == "pending"
+            ]
+            if chat_id:
+                chat_pending = [r for r in pending_candidates if r.get("chat_id") == chat_id]
+                if chat_pending:
+                    pending_candidates = chat_pending
+
+            if pending_candidates:
+                pending_candidates.sort(key=lambda x: x.get("remind_at", ""))
+                return pending_candidates[0], "pending"
+
+            return None, ""
+
+    def complete_reminder(self, rem_id: str):
+        """将指定提醒标记为完成/已闭环"""
+        with self.lock:
+            for r in self.reminders:
+                if r.get("id") == rem_id:
+                    r["status"] = "completed"
+                    r["completed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self._save_reminders()
+                    logger.info(f"✅ 闹钟已标记闭环: {r['id']} ({r.get('task')})")
+                    return r
+        return None
+
+    def snooze_reminder(self, rem_id: str, minutes: int = 10):
+        """将提醒推迟延期指定分钟"""
+        with self.lock:
+            for r in self.reminders:
+                if r.get("id") == rem_id:
+                    new_dt = datetime.now() + timedelta(minutes=minutes)
+                    new_time_str = new_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    r["status"] = "pending"
+                    r["remind_at"] = new_time_str
+                    r["snooze_count"] = r.get("snooze_count", 0) + 1
+                    r["last_snoozed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self._save_reminders()
+                    logger.info(f"⏰ 闹钟已推迟 {minutes} 分钟至 {new_time_str}: {r['id']} ({r.get('task')})")
+                    return r, new_dt
+        return None
+
+    def cancel_reminder_by_id(self, rem_id: str):
+        """按 ID 取消提醒"""
+        with self.lock:
+            for r in self.reminders:
+                if r.get("id") == rem_id:
+                    r["status"] = "cancelled"
+                    r["cancelled_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self._save_reminders()
+                    logger.info(f"🗑️ 闹钟已取消: {r['id']} ({r.get('task')})")
+                    return r
+        return None
+
+    def update_reminder_feishu_guid(self, rem_id: str, guid: str):
+        """关联飞书待办 Task GUID"""
+        with self.lock:
+            for r in self.reminders:
+                if r.get("id") == rem_id:
+                    r["feishu_task_guid"] = guid
+                    self._save_reminders()
+                    break
 
     def _trigger_alert(self, item: dict):
         """时间到达，主动向飞书推送提醒卡片"""
@@ -340,12 +431,12 @@ class ReminderScheduler:
         task = item["task"]
         remind_time = item["remind_at"]
 
+        # 极简 Deja Vu 风格通知卡片：无长分割线、无多余emoji，提供明确闭环与延期指引
         alert_msg = (
-            "🔔 ════【叮！备忘闹钟提醒】════ 🔔\n\n"
-            f"📌 事项：{task}\n"
-            f"🕒 预定时间：{remind_time}\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "💡 收到后可回复任意消息标记确认"
+            "⏰ 备忘闹钟\n"
+            f"事项：{task}\n"
+            f"时间：{remind_time}\n\n"
+            "回复「确认/完成」闭环，或「延期 10分钟」推迟"
         )
 
         try:
@@ -368,8 +459,7 @@ class ReminderScheduler:
 
         # 联动思源笔记：打勾完成标记
         if self.siyuan and self.siyuan.is_active():
-            now_time = datetime.now().strftime("%H:%M:%S")
-            self.siyuan.append_memo(f"🔔 【闹钟已触发】{task} (预定于 {remind_time})", summary_tag="已提醒")
+            self.siyuan.append_memo(f"⏰ 【闹钟已触发】{task} (预定于 {remind_time})", summary_tag="#闹钟提醒")
 
     def _run_loop(self):
         """后台高频巡检线程"""
