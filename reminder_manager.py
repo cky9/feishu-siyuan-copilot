@@ -103,20 +103,22 @@ class ReminderScheduler:
         if re.search(corr_pattern, text_clean):
             return True
 
-        # 3. 句首关键词 (Prefix)
-        prefix_pattern = r'^(?:[【\[\(（](?:闹钟|待办|待办事项|提醒|提醒我|定闹钟|设闹钟|定个闹钟|设个闹钟|设个提醒|帮我提醒|记一下|备忘|TODO|todo)[】\]\)）]\s*|(?:闹钟|待办|待办事项|提醒|提醒我|定闹钟|设闹钟|定个闹钟|设个闹钟|设个提醒|帮我提醒|记一下|备忘|TODO|todo)[:：\s\-\/]+\s*)'
+        # 3. 句首关键词 (Prefix) - 无论有无空格冒号均可匹配
+        prefix_pattern = r'^(?:[【\[\(（]?(?:闹钟|待办|待办事项|提醒|提醒我|定闹钟|设闹钟|定个闹钟|设个闹钟|设个提醒|帮我提醒|记一下|备忘|TODO|todo)[】\]\)）]?[:：\s\-\/]*\s*)'
         if re.search(prefix_pattern, text_clean, re.IGNORECASE):
-            return True
-        if re.match(r'^(?:闹钟|待办|备忘|TODO|todo)\s+', text_clean, re.IGNORECASE):
-            return True
+            # 若以待办/提醒开头，且包含明确的时间词或点钟词，确认为提醒日程信号
+            if re.search(r'(?:今天|明天|后天|周[一二三四五六日天]|星期|点|分|小时|半小时|\d+:\d+)', text_clean):
+                return True
+            if re.search(r'^(?:[【\[\(（](?:闹钟|待办|提醒)[】\]\)）]|(?:闹钟|提醒)[:：\s])', text_clean):
+                return True
 
         # 4. 句尾关键词 (Suffix)
         suffix_pattern = r'[-——\s\(\[（【]+(?:闹钟|待办|提醒|提醒我|叫我|记一下|备忘|定闹钟|设闹钟)[】）\]\)]*$'
         if re.search(suffix_pattern, text_clean):
             return True
 
-        # 5. 句中明确的祈使/使役命令短语（用户直接向助手发出"提醒我/叫我"指令）
-        imperative_pattern = r'(?:提醒我|叫我|通知我|记得提醒我|帮我定个闹钟|帮我设个闹钟|定个闹钟|设个闹钟|设个提醒|记得通知我)'
+        # 5. 句中明确的祈使/使役命令短语（用户直接向助手发出"提醒我/叫我/叫谁起床"指令）
+        imperative_pattern = r'(?:提醒我|叫我|通知我|叫[\w\u4e00-\u9fa5]+(?:起床|起来)?|记得提醒我|帮我定个闹钟|帮我设个闹钟|定个闹钟|设个闹钟|设个提醒|记得通知我)'
         if re.search(imperative_pattern, text_clean):
             return True
 
@@ -422,6 +424,15 @@ class ReminderScheduler:
             for r in self.reminders:
                 if r.get("id") == rem_id:
                     r["feishu_task_guid"] = guid
+                    self._save_reminders()
+                    break
+
+    def update_reminder_calendar_event(self, rem_id: str, event_id: str):
+        """关联飞书官方日历日程 Event ID"""
+        with self.lock:
+            for r in self.reminders:
+                if r.get("id") == rem_id:
+                    r["calendar_event_id"] = event_id
                     self._save_reminders()
                     break
 

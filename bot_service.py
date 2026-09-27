@@ -609,6 +609,113 @@ def find_task_guid_by_summary(task_summary: str) -> str:
         logger.warning(f"查找本地任务 GUID 异常: {e}")
     return ""
 
+# ================= 飞书官方日历日程集成 (Calendar v4 手机日历联动) =================
+def create_feishu_calendar_event(summary: str, start_dt: datetime, open_id: str = "", duration_minutes: int = 15, description: str = "") -> dict:
+    """创建飞书官方日历日程 (Calendar Event v4)，并添加用户为参与人，实现手机系统日历与闹钟无缝联动"""
+    try:
+        from lark_oapi.api.calendar.v4 import (
+            CreateCalendarEventRequest, CreateCalendarEventAttendeeRequest,
+            CreateCalendarEventAttendeeRequestBody, CalendarEvent, CalendarEventAttendee,
+            TimeInfo, Reminder
+        )
+        st = int(start_dt.timestamp())
+        et = st + duration_minutes * 60
+
+        event_builder = CalendarEvent.builder() \
+            .summary(summary) \
+            .description(description or "🤖 飞书 24h AI 秘书创建（已联动手机系统日历与闹钟）") \
+            .start_time(TimeInfo.builder().timestamp(str(st)).build()) \
+            .end_time(TimeInfo.builder().timestamp(str(et)).build()) \
+            .need_notification(True) \
+            .reminders([
+                Reminder.builder().minutes(0).build(),  # 事件发生时准时响铃
+                Reminder.builder().minutes(5).build()   # 提前 5 分钟预警
+            ])
+
+        req = CreateCalendarEventRequest.builder() \
+            .calendar_id("primary") \
+            .request_body(event_builder.build()) \
+            .build()
+
+        resp = client.calendar.v4.calendar_event.create(req)
+        if resp.success():
+            event_id = resp.data.event.event_id
+            app_link = getattr(resp.data.event, "app_link", "")
+            logger.info(f"📅 成功创建飞书官方日历日程: {summary} (Event ID: {event_id})")
+
+            # 邀请用户作为参与人，使其立即出现在用户的个人主日历及手机同步日历中
+            attendee_id = open_id or DEFAULT_ASSIGNEE_OPEN_ID
+            if attendee_id:
+                try:
+                    att_req = CreateCalendarEventAttendeeRequest.builder() \
+                        .calendar_id("primary") \
+                        .event_id(event_id) \
+                        .user_id_type("open_id") \
+                        .request_body(CreateCalendarEventAttendeeRequestBody.builder()
+                                      .attendees([CalendarEventAttendee.builder()
+                                                  .type("user")
+                                                  .user_id(attendee_id)
+                                                  .build()])
+                                      .need_notification(False)
+                                      .build()) \
+                        .build()
+                    client.calendar.v4.calendar_event_attendee.create(att_req)
+                    logger.info(f"👥 已邀请用户加入日历日程: {attendee_id}")
+                except Exception as e:
+                    logger.warning(f"添加日历参与人异常: {e}")
+
+            return {"event_id": event_id, "app_link": app_link}
+        else:
+            logger.warning(f"创建飞书日历日程失败: {resp.code} - {resp.msg}")
+    except Exception as e:
+        logger.error(f"创建飞书日历日程异常: {e}")
+    return {}
+
+def update_feishu_calendar_event(event_id: str, new_start_dt: datetime = None, duration_minutes: int = 15, new_summary: str = None) -> bool:
+    """更新飞书官方日历日程时间或标题（用于延期或标记完成）"""
+    if not event_id:
+        return False
+    try:
+        from lark_oapi.api.calendar.v4 import PatchCalendarEventRequest, CalendarEvent, TimeInfo
+        builder = CalendarEvent.builder()
+        if new_start_dt:
+            st = int(new_start_dt.timestamp())
+            et = st + duration_minutes * 60
+            builder.start_time(TimeInfo.builder().timestamp(str(st)).build())
+            builder.end_time(TimeInfo.builder().timestamp(str(et)).build())
+        if new_summary:
+            builder.summary(new_summary)
+
+        req = PatchCalendarEventRequest.builder() \
+            .calendar_id("primary") \
+            .event_id(event_id) \
+            .request_body(builder.build()) \
+            .build()
+        resp = client.calendar.v4.calendar_event.patch(req)
+        if resp.success():
+            logger.info(f"📅 成功更新飞书日历日程: {event_id}")
+            return True
+        else:
+            logger.warning(f"更新飞书日历日程返回: {resp.code} - {resp.msg}")
+    except Exception as e:
+        logger.warning(f"更新飞书日历日程异常: {e}")
+    return False
+
+def delete_feishu_calendar_event(event_id: str) -> bool:
+    """删除飞书官方日历日程（用于取消提醒）"""
+    if not event_id:
+        return False
+    try:
+        from lark_oapi.api.calendar.v4 import DeleteCalendarEventRequest
+        req = DeleteCalendarEventRequest.builder().calendar_id("primary").event_id(event_id).build()
+        resp = client.calendar.v4.calendar_event.delete(req)
+        if resp.success():
+            logger.info(f"📅 成功删除飞书日历日程: {event_id}")
+            return True
+    except Exception as e:
+        logger.warning(f"删除飞书日历日程异常: {e}")
+    return False
+
 def handle_reminder_feedback_intent(text_clean: str, chat_id: str, open_id: str):
     """
     上下文感知：闭环/延期/取消闹钟提醒
@@ -657,12 +764,15 @@ def handle_reminder_feedback_intent(text_clean: str, chat_id: str, open_id: str)
     task_name = target_rem.get("task", "未知事项")
     rem_id = target_rem.get("id")
     guid = target_rem.get("feishu_task_guid") or find_task_guid_by_summary(task_name)
+    cal_event_id = target_rem.get("calendar_event_id")
 
     # 执行具体动作
     if is_complete or is_gentle_affirm:
         reminder_scheduler.complete_reminder(rem_id)
         if guid:
             complete_feishu_task(guid)
+        if cal_event_id:
+            update_feishu_calendar_event(cal_event_id, new_summary=f"✅ {task_name}")
         if siyuan and siyuan.is_active():
             siyuan.append_memo(f"✅ 事项已完成闭环：{task_name}", summary_tag="#已完成")
         logger.info(f"🎯 提醒闭环成功: {task_name} (ID: {rem_id})")
@@ -697,6 +807,8 @@ def handle_reminder_feedback_intent(text_clean: str, chat_id: str, open_id: str)
             new_time_str = new_dt.strftime("%H:%M") if new_dt.date() == datetime.now().date() else new_dt.strftime("%Y-%m-%d %H:%M")
             if guid:
                 update_feishu_task_due(guid, new_dt)
+            if cal_event_id:
+                update_feishu_calendar_event(cal_event_id, new_start_dt=new_dt)
             if siyuan and siyuan.is_active():
                 siyuan.append_memo(f"⏰ 事项已延期 {delay_minutes} 分钟至 [{new_time_str}]：{task_name}", summary_tag="#待办闹钟")
             logger.info(f"🎯 提醒延期成功: {task_name} -> {new_time_str}")
@@ -711,6 +823,8 @@ def handle_reminder_feedback_intent(text_clean: str, chat_id: str, open_id: str)
         reminder_scheduler.cancel_reminder_by_id(rem_id)
         if guid:
             delete_feishu_task(guid)
+        if cal_event_id:
+            delete_feishu_calendar_event(cal_event_id)
         if siyuan and siyuan.is_active():
             siyuan.append_memo(f"🗑️ 取消提醒：{task_name}", summary_tag="#注销闹钟")
         logger.info(f"🎯 提醒取消成功: {task_name} (ID: {rem_id})")
@@ -1286,9 +1400,16 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
         task_info = create_feishu_task(remind_task, due_dt=remind_dt, open_id=open_id, description=f"⏰ 智能提醒: 设定于 {time_display} 触发")
         if task_info.get("guid"):
             reminder_scheduler.update_reminder_feishu_guid(item["id"], task_info["guid"])
+
+        # 同步创建飞书官方日历日程 (带准时与提前5分钟闹钟提醒，秒级同步至手机系统日历)
+        cal_info = create_feishu_calendar_event(remind_task, start_dt=remind_dt, open_id=open_id, description=f"⏰ 由飞书 24h AI 秘书创建\n• 事项：{remind_task}\n• 时间：{time_display}")
+        if cal_info.get("event_id"):
+            reminder_scheduler.update_reminder_calendar_event(item["id"], cal_info["event_id"])
+
         task_link_part = ""
         if task_info.get("url"):
             task_link_part = f"\n📋 飞书待办：[点击进入待办详情]({task_info['url']})"
+        cal_part = "\n📅 手机日历：已同步至飞书与手机系统日历 (含闹钟提醒)"
 
         title_header = "提醒已更新" if is_correction else "提醒已设定"
         correction_tip = "已废弃上一条旧日程。\n" if is_correction else ""
@@ -1297,9 +1418,10 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
             f"{title_header}\n"
             f"事项：{remind_task}\n"
             f"时间：{time_display} (约 {remaining_str} 后)"
-            f"{task_link_part}\n"
+            f"{task_link_part}"
+            f"{cal_part}\n"
             f"{correction_tip}"
-            "思源与待办已同步"
+            "思源、待办与手机日历已同步"
         )
 
     # 3.5 检查是否是显式待办事项指令 (以 - [ ], TODO, 待办 开头)
