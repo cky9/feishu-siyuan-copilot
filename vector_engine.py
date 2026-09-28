@@ -71,6 +71,7 @@ class VectorEngine:
         self.db_path = db_path or auto_primary_db
         self.mirror_db_path = auto_mirror_db if not db_path else None
         self.model_path = model_path or auto_model
+        self.enable_obsidian = False  # 遵从指令：断开 Obsidian 历史重复数据印证
         self._model = None
         self._init_db(self.db_path)
         if self.mirror_db_path and _is_db_accessible(self.mirror_db_path):
@@ -224,18 +225,24 @@ class VectorEngine:
         book_sims = self.search_similar(current_text, top_k=1, min_similarity=0.50, filter_source="book")
         book_match = book_sims[0] if book_sims else None
 
-        # 通道 2: 往日笔记通道 (思源/Obsidian，阈值 0.58，防近期回环冷冻 30 分钟)
+        # 通道 2: 往日笔记通道 (当前已断开 Obsidian 历史重复数据，仅连接思源笔记)
         from datetime import datetime, timedelta
         cooldown_time = (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
 
-        all_sims = self.search_similar(current_text, top_k=6, min_similarity=0.58, exclude_id=exclude_id)
+        allowed_sources = ["siyuan"]
+        if getattr(self, "enable_obsidian", False):
+            allowed_sources.append("obsidian")
+
         note_match = None
-        for s in all_sims:
-            if s["source"] in ["siyuan", "obsidian"]:
+        for src in allowed_sources:
+            sims = self.search_similar(current_text, top_k=3, min_similarity=0.58, filter_source=src, exclude_id=exclude_id)
+            for s in sims:
                 # 排除 30 分钟以内刚发的新点滴，避免刚才说的话被当成历史笔记回弹
                 if s["source"] == "obsidian" or s["created_at"] < cooldown_time:
                     note_match = s
                     break
+            if note_match:
+                break
 
         if not book_match and not note_match:
             return ""
