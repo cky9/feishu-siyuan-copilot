@@ -132,6 +132,76 @@ class VectorEngine:
             logger.debug(f"写入 {path} 异常: {e}")
             return False
 
+    def _write_batch_db(self, path: str, rows: list) -> bool:
+        if not rows:
+            return True
+        try:
+            with sqlite3.connect(path, timeout=10.0) as conn:
+                cursor = conn.cursor()
+                cursor.executemany("""
+                    INSERT OR REPLACE INTO knowledge_vectors 
+                    (id, source, ref_id, title, content, tags, created_at, updated_at, vector)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, rows)
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.debug(f"批量写入 {path} 异常: {e}")
+            return False
+
+    def add_records_batch(self, records: List[Dict]) -> int:
+        """
+        批量增量写入多条记录 (利用 MPS 批量矩阵加速与单事务合并，大幅提高吞吐量)
+        每条记录格式:
+        {
+            "id": record_id,
+            "source": source,
+            "ref_id": ref_id,
+            "content": content,
+            "title": title,
+            "tags": tags,
+            "created_at": created_at (可选)
+        }
+        """
+        valid_records = []
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for r in records:
+            c = r.get("content", "").strip()
+            if len(c) >= 5:
+                valid_records.append({
+                    "id": r["id"],
+                    "source": r.get("source", "siyuan"),
+                    "ref_id": r.get("ref_id", ""),
+                    "title": r.get("title", ""),
+                    "content": c,
+                    "tags": r.get("tags", ""),
+                    "created_at": r.get("created_at") or now_str
+                })
+
+        if not valid_records:
+            return 0
+
+        try:
+            texts = [r["content"] for r in valid_records]
+            embs = self.model.encode(texts, batch_size=32, normalize_embeddings=True)
+            rows = []
+            for r, emb in zip(valid_records, embs):
+                vec_blob = np.asarray(emb, dtype=np.float32).tobytes()
+                rows.append((
+                    r["id"], r["source"], r["ref_id"], r["title"],
+                    r["content"], r["tags"], r["created_at"], now_str, vec_blob
+                ))
+
+            self._write_batch_db(self.db_path, rows)
+            if self.mirror_db_path and _is_db_accessible(self.mirror_db_path):
+                self._write_batch_db(self.mirror_db_path, rows)
+
+            logger.info(f"💾 [批量向量已入库] 成功录入 {len(rows)} 条记录")
+            return len(rows)
+        except Exception as e:
+            logger.error(f"批量写入向量数据库异常: {e}")
+            return 0
+
     def add_record(self, record_id: str, source: str, ref_id: str, content: str,
                    title: str = "", tags: str = "", created_at: str = None) -> bool:
         """增量写入一条笔记/随想的向量记录 (自动执行双写同步)"""

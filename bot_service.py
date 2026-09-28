@@ -302,6 +302,16 @@ except Exception as e:
     logger.warning(f"本地向量引擎挂载失败: {e}")
     vector_engine = None
 
+# ================= 思源笔记夜间离线增量向量化调度 =================
+try:
+    from siyuan_sync import SiYuanIncrementalSync
+    siyuan_syncer = SiYuanIncrementalSync(vector_engine=vector_engine, siyuan_client=siyuan)
+    logger.info("📚 思源离线增量同步引擎已就绪")
+except Exception as e:
+    logger.warning(f"思源离线增量同步引擎挂载失败: {e}")
+    siyuan_syncer = None
+
+
 
 
 # ================= 大模型分析与调用 =================
@@ -1303,6 +1313,7 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
             matched_key = target
 
         if matched_key and matched_key in providers:
+            chosen = providers[matched_key]
             # 内存中更新活跃配置
             CONFIG["llm"] = {
                 "provider": chosen.get("provider", "custom"),
@@ -1344,6 +1355,38 @@ def handle_incoming_text(text: str, chat_id: str, open_id: str = "") -> str:
         else:
             avail = ["硅基ds", "硅基qwen", "官方ds", "智谱"]
             return f"⚠️ 未识别的目标模型通道「{target}」。\n支持的快捷名称：{'、'.join(avail)}。\n可发「查看模型」查看详情。"
+
+    # 0.10 检查是否是思源增量同步指令
+    if text_clean.lower() in ["/sync", "同步思源", "思源同步", "增量同步", "向量化思源"]:
+        if not siyuan_syncer:
+            return "⚠️ 思源增量同步引擎未成功挂载，请检查后台配置与日志。"
+        siyuan.append_memo(f"🔄 手动触发思源笔记增量同步", summary_tag="#系统指令")
+        res = siyuan_syncer.sync_once()
+        total_cnt = vector_engine.count_records() if vector_engine else 0
+        return (
+            f"📚 **思源笔记增量向量同步完成**\n\n"
+            f"• 扫描块数：`{res['scanned']}` 块\n"
+            f"• 新增入库：`{res['new_indexed']}` 条\n"
+            f"• 过滤跳过：`{res['skipped']}` 条\n"
+            f"• 本次耗时：`{res['elapsed_s']}` 秒\n"
+            f"• 最新水位：`{res['watermark']}`\n"
+            f"• 知识库总量：`{total_cnt}` 条\n\n"
+            f"💡 每日凌晨 03:30 自动执行后台增量同步，无需人工干预。"
+        )
+
+    # 0.11 检查是否是查看知识库/向量状态指令
+    if text_clean.lower() in ["/kb", "知识库状态", "向量库状态", "向量状态"]:
+        st = siyuan_syncer.load_watermark() if siyuan_syncer else {}
+        total_cnt = vector_engine.count_records() if vector_engine else 0
+        return (
+            f"🧠 **本地离线知识库与向量看板**\n\n"
+            f"• 知识库总记录：`{total_cnt}` 条 (思源笔墨 + 谋略典籍)\n"
+            f"• 上次同步时间：`{st.get('last_sync_at', '未同步')}`\n"
+            f"• 同步水位戳：`{st.get('last_sync_time', '无')}`\n"
+            f"• 自动调度周期：**每日凌晨 03:30** 定时增量\n"
+            f"• 硬件离线加速：BAAI/bge-base-zh-v1.5 (Apple Silicon MPS)\n"
+            f"• 灵感印证策略：思源笔记 + 典籍 (Obsidian 历史已隔离)"
+        )
 
     # 1. 检查是否是查看/管理提醒指令
     if text_clean in ["我的提醒", "查看提醒", "提醒列表", "闹钟列表", "/reminders", "/remind"]:
@@ -1823,6 +1866,10 @@ def main():
         logger.info(f"本地向量底座: 已挂载 (ADATA / 知识记录: {vector_engine.count_records()} 条)")
     else:
         logger.info("本地向量底座: 未挂载")
+
+    if siyuan_syncer:
+        siyuan_syncer.start_nightly_scheduler(target_hour=3, target_minute=30)
+        logger.info("🌙 思源笔记夜间自动增量向量化调度已启动 (触发时刻: 每日 03:30)")
     logger.info("=" * 60)
 
     client = lark.Client.builder() \
